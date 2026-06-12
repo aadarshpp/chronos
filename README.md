@@ -44,28 +44,6 @@ The project demonstrates how low-level systems programming can be combined with 
 
 ---
 
-## Architecture
-
-```text
-                Yahoo Finance API
-                        │
-                        ▼
-                ┌─────────────┐
-                │  Fetcher C  │
-                └──────┬──────┘
-                       │
-                       ▼
-            Binary Storage (data/)
-                       │
-                       ▼
-               FastAPI Backend
-                       │
-                       ▼
-              TradingView Charts
-```
-
----
-
 ## Binary Schema
 
 Each record is exactly 32 bytes.
