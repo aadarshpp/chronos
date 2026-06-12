@@ -9,9 +9,6 @@ fetcher
 data/
 *.bin
 
-# Library
-lib/
-
 # Python
 __pycache__/
 *.pyc
