@@ -6,9 +6,9 @@ A high-performance financial time-series database built with C for storage effic
 
 Metric-T is designed around a hybrid architecture:
 
-* **Core Engine (C)** — Fetches market data, parses JSON responses, and serializes records into an optimized binary format.
-* **API Layer (FastAPI)** — Exposes binary data through HTTP endpoints.
-* **Frontend Dashboard** — Interactive TradingView-style charts rendered directly in the browser.
+* **Core Engine (C)** - Fetches market data, parses JSON responses, and serializes records into an optimized binary format.
+* **API Layer (FastAPI)** - Exposes binary data through HTTP endpoints.
+* **Frontend Dashboard** - Interactive TradingView-style charts rendered directly in the browser.
 
 The project demonstrates how low-level systems programming can be combined with modern web technologies to build efficient analytics tools.
 
