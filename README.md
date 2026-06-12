@@ -151,35 +151,6 @@ FastAPI
       ▼
 Dashboard
 ```
-
----
-
-## Future Roadmap
-
-### Scalability
-
-* Monthly/yearly data partitioning
-* Multi-symbol storage support
-
-### Performance
-
-* Memory-mapped file access (`mmap`)
-* Faster range queries
-* Indexed lookups
-
-### Analytics
-
-* Simple Moving Average (SMA)
-* Exponential Moving Average (EMA)
-* RSI and MACD indicators
-
-### Product Features
-
-* Dynamic ticker search
-* Multi-asset support
-* Live refresh mode
-* Historical backtesting
-
 ---
 
 ## Technology Stack
