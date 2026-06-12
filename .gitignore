@@ -1,0 +1,18 @@
+# Binaries
+writer
+reader
+fetcher
+*.exe
+*.out
+
+# Data files 
+data/
+*.bin
+
+# Library
+lib/
+
+# Python
+__pycache__/
+*.pyc
+venv/
