@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Metric-T Dashboard</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; 
+            padding: 20px; 
+            margin: 0;
+            background: #f4f4f9; 
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .container { 
+            width: 95%;
+            max-width: 1400px; /* Wider max width */
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+            transition: background-color 0.3s, color 0.3s;
+            box-sizing: border-box;
+        }
+        h1 { margin-top: 0; }
+        
+        /* FIX FOR SQUISHING: Chart container takes 100% width */
+        #chart-wrapper {
+            width: 100%;
+            height: 600px;
+            margin-top: 20px;
+            box-sizing: border-box;
+        }
+        
+        /* BUTTONS */
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button.active {
+            background-color: #004494;
+        }
+
+        /* TABLE */
+        #data-table-container {
+            margin-top: 20px;
+            display: none; /* Hidden by default */
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        
+        /* DARK MODE */
+        body.dark-mode {
+            background: #000000;
+            color: #d1d4dc;
+        }
+        body.dark-mode .container {
+            background: #131722;
+            color: #d1d4dc;
+        }
+        body.dark-mode button {
+            background-color: #2962ff;
+        }
+        body.dark-mode button:hover {
+            background-color: #1e54b2;
+        }
+        body.dark-mode th {
+            background-color: #2a2e39;
+            color: #b2b5be;
+        }
+        body.dark-mode td {
+            border-bottom: 1px solid #2a2e39;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Metric-T: High-Performance Engine</h1>
+        
+        <!-- BUTTONS -->
+        <div class="controls">
+            <button id="theme-btn" onclick="toggleTheme()">Switch to Dark Mode</button>
+            <button id="table-btn" onclick="toggleTable()">Show Data Table</button>
+        </div>
+
+        <!-- CHART -->
+        <div id="chart-wrapper">
+            <div id="chart"></div>
+        </div>
+
+        <!-- TABLE -->
+        <div id="data-table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time (UTC)</th>
+                        <th>Open</th>
+                        <th>High</th>
+                        <th>Low</th>
+                        <th>Close</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+                    <!-- Rows injected by JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+
+    <script>
+        let chart;
+        let candlestickSeries;
+        let currentData = [];
+        let isDarkMode = true;
+
+        async function loadData() {
+            try {
+                const response = await fetch('/api/data');
+                const data = await response.json();
+                
+                if (data.length === 0) {
+                    document.body.innerHTML += "<h3 style='text-align:center; color:red'>No Data Found. Run ./fetcher in terminal.</h3>";
+                    return;
+                }
+
+                currentData = data;
+                renderChart(data);
+                renderTable(data); // Pre-load table
+            } catch (error) {
+                console.error("Critical Error:", error);
+                alert("Failed to load data. Check console (F12) for details.");
+            }
+        }
+
+        function renderChart(data) {
+            const chartElement = document.getElementById('chart');
+            
+            // 1. Create Chart
+            chart = LightweightCharts.createChart(chartElement, {
+                width: chartElement.parentElement.clientWidth,
+                height: 600,
+                layout: {
+                    background: { color: '#ffffff' },
+                    textColor: '#333',
+                },
+                grid: {
+                    vertLines: { color: '#e1e1e1' },
+                    horzLines: { color: '#e1e1e1' },
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+                rightPriceScale: {
+                    borderColor: '#cccccc',
+                },
+                timeScale: {
+                    borderColor: '#cccccc',
+                    timeVisible: true,
+                    secondsVisible: false,
+                    
+                    // --- ALIGNMENT & ZOOM SETTINGS ---
+                    rightOffset: 10,        // Adds space on the right side (Higher number = more space)
+                    minBarSpacing: 5,       // Prevents zooming out too much (Higher = more zoomed in)
+                    fixLeftEdge: true,      // Prevents scrolling past the start
+                    fixRightEdge: true,     // Prevents scrolling past the end
+                    // -------------------------------
+                },
+            });
+
+            // 2. Add Series
+            candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+            });
+
+            // 3. Map Data
+            const candleData = data.map(d => ({
+                time: d.x / 1000, 
+                open: d.o,
+                high: d.h,
+                low: d.l,
+                close: d.c
+            }));
+
+            candlestickSeries.setData(candleData);
+
+            // --- FORCE ALIGNMENT ON LOAD ---
+            // This fits the data to the screen automatically when the page loads
+            chart.timeScale().fitContent();
+            // -------------------------------
+
+            // 4. Responsive Resize
+            new ResizeObserver(entries => {
+                if (entries.length === 0) return;
+                const newRect = entries[0].contentRect;
+                chart.applyOptions({ width: newRect.width, height: newRect.height });
+            }).observe(document.getElementById('chart-wrapper'));
+            
+            // Initial Theme Apply
+            updateTheme();
+        }
+
+        // --- TABLE RENDERER ---
+        function renderTable(data) {
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = ''; // Clear existing
+            
+            // Limit to first 100 rows for performance in browser
+            const limit = Math.min(data.length, 100);
+            
+            for(let i=0; i<limit; i++) {
+                const d = data[i];
+                const date = new Date(d.x);
+                const row = `
+                    <tr>
+                        <td>${date.toISOString()}</td>
+                        <td>${d.o.toFixed(2)}</td>
+                        <td>${d.h.toFixed(2)}</td>
+                        <td>${d.l.toFixed(2)}</td>
+                        <td>${d.c.toFixed(2)}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            }
+        }
+
+        // --- BUTTON LOGIC ---
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            const btn = document.getElementById('theme-btn');
+            btn.textContent = isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode";
+            updateTheme();
+        }
+
+        function toggleTable() {
+            const container = document.getElementById('data-table-container');
+            const btn = document.getElementById('table-btn');
+            
+            if (container.style.display === 'block') {
+                container.style.display = 'none';
+                btn.textContent = "Show Data Table";
+                btn.classList.remove('active');
+            } else {
+                container.style.display = 'block';
+                btn.textContent = "Hide Data Table";
+                btn.classList.add('active');
+            }
+        }
+
+        // --- THEME LOGIC ---
+        function updateTheme() {
+            if (!chart) return;
+            
+            if (isDarkMode) {
+                document.body.classList.add('dark-mode');
+            } else {
+                document.body.classList.remove('dark-mode');
+            }
+
+            const colors = isDarkMode ? {
+                bg: '#131722',
+                text: '#d1d4dc',
+                grid: '#2a2e39',
+                crosshairText: '#d1d4dc',
+                borderColor: '#2a2e39'
+            } : {
+                bg: '#ffffff',
+                text: '#333',
+                grid: '#e1e1e1',
+                crosshairText: '#333',
+                borderColor: '#cccccc'
+            };
+
+            chart.applyOptions({
+                layout: { background: { color: colors.bg }, textColor: colors.text },
+                grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                    vertLine: {
+                        color: '#758696',
+                        width: 1,
+                        style: LightweightCharts.LineStyle.Dashed,
+                        labelBackgroundColor: colors.bg,
+                    },
+                    horzLine: {
+                        color: '#758696',
+                        width: 1,
+                        style: LightweightCharts.LineStyle.Dashed,
+                        labelBackgroundColor: colors.bg,
+                    },
+                },
+                rightPriceScale: { borderColor: colors.borderColor },
+                timeScale: { borderColor: colors.borderColor },
+            });
+        }
+
+        // Start
+        loadData();
+    </script>
+</body>
+</html>
