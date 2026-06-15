@@ -18,6 +18,7 @@ typedef struct {
 #pragma pack(pop)
 
 #define PRICE_SCALE 10000
-#define DATA_FILE "data/market_data.bin"
+#define DATA_DIR "data/"
+#define CATALOG_FILE "data/catalog.json"
 
 #endif

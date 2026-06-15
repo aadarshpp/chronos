@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <curl/curl.h>
+#include <time.h>
 #include "cJSON.h"
 #include "engine.h"
 
@@ -15,18 +16,141 @@ size_t buffer_index = 0;
 // libcurl calls this function when data arrives.
 size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp) {
     size_t total_size = size * nmemb;
-    
+
     // Safety check to prevent buffer overflow
     if (buffer_index + total_size >= sizeof(response_buffer)) {
         printf("Error: Response too large for buffer.\n");
         return 0;
     }
-    
+
     // Append data to our global buffer
     memcpy(&response_buffer[buffer_index], contents, total_size);
     buffer_index += total_size;
-    
+
     return total_size;
+}
+
+char* get_partition_filename(uint64_t timestamp) {
+    static char filename[256];
+
+    time_t raw_time = timestamp;
+    struct tm *time_info = gmtime(&raw_time);
+
+    snprintf(
+        filename,
+        sizeof(filename),
+        "%sAAPL_%04d_%02d.bin",
+        DATA_DIR,
+        time_info->tm_year + 1900,
+        time_info->tm_mon + 1
+    );
+
+    return filename;
+}
+
+void update_catalog(char *filename, uint64_t start, uint64_t end) {
+
+    cJSON *new_entry = cJSON_CreateObject();
+
+    cJSON_AddStringToObject(
+        new_entry,
+        "file",
+        filename
+    );
+
+    cJSON_AddNumberToObject(
+        new_entry,
+        "start",
+        start
+    );
+
+    cJSON_AddNumberToObject(
+        new_entry,
+        "end",
+        end
+    );
+
+    cJSON *catalog_array = NULL;
+
+    FILE *catalog_file = fopen(CATALOG_FILE, "r");
+
+    if (catalog_file) {
+
+        fseek(catalog_file, 0, SEEK_END);
+        long size = ftell(catalog_file);
+        rewind(catalog_file);
+
+        char *buffer = malloc(size + 1);
+
+        fread(buffer, 1, size, catalog_file);
+        buffer[size] = '\0';
+
+        fclose(catalog_file);
+
+        catalog_array = cJSON_Parse(buffer);
+
+        free(buffer);
+    }
+
+    if (!catalog_array) {
+        catalog_array = cJSON_CreateArray();
+        printf("Catalog entries before append: %d\n",
+            cJSON_GetArraySize(catalog_array));
+    }
+
+    // cJSON_AddItemToArray(catalog_array, new_entry);
+
+    int updated = 0;
+
+    for (int i = 0; i < cJSON_GetArraySize(catalog_array); i++) {
+
+        cJSON *entry = cJSON_GetArrayItem(catalog_array, i);
+
+        cJSON *file_item = cJSON_GetObjectItem(entry, "file");
+
+        if (file_item && strcmp(file_item->valuestring, filename) == 0) {
+
+            cJSON_ReplaceItemInObject(
+                entry,
+                "start",
+                cJSON_CreateNumber(start)
+            );
+
+            cJSON_ReplaceItemInObject(
+                entry,
+                "end",
+                cJSON_CreateNumber(end)
+            );
+
+            updated = 1;
+            break;
+        }
+    }
+
+    if (!updated) {
+        cJSON_AddItemToArray(catalog_array, new_entry);
+    }
+
+    printf("Catalog entries after append: %d\n",
+        cJSON_GetArraySize(catalog_array));
+
+    char *json_string = cJSON_Print(catalog_array);
+
+    FILE *catalog = fopen(CATALOG_FILE, "w");
+
+    if (!catalog) {
+        perror("Failed to open catalog");
+        cJSON_free(json_string);
+        cJSON_Delete(catalog_array);
+        return;
+    }
+
+    fprintf(catalog, "%s", json_string);
+
+    fclose(catalog);
+
+    cJSON_free(json_string);
+    cJSON_Delete(catalog_array);
 }
 
 // --- MAIN ENGINE ---
@@ -43,10 +167,10 @@ int main() {
         // You can change "AAPL" to "TSLA", "BTC-USD", etc.
         const char *url = "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1m&range=1d";
         curl_easy_setopt(curl, CURLOPT_URL, url);
-        
+
         // 3. Setup the callback to capture the response
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-        
+
         // 4. Add User-Agent (Yahoo Finance sometimes blocks requests without it)
         struct curl_slist *headers = NULL;
         headers = curl_slist_append(headers, "User-Agent: Mozilla/5.0");
@@ -143,15 +267,17 @@ int main() {
         // --- PHASE 3: WRITING BINARY ---
         printf("Writing to binary file...\n");
 
-        FILE *f = fopen(DATA_FILE, "wb");
-        if (!f) {
-            perror("Failed to open data file");
-            cJSON_Delete(root);
-            return 1;
-        }
+        // FILE *f = fopen(DATA_FILE, "wb");
+        // if (!f) {
+        //     perror("Failed to open data file");
+        //     cJSON_Delete(root);
+        //     return 1;
+        // }
 
         int count = cJSON_GetArraySize(ts_arr);
-
+        uint64_t partition_start = 0;
+        uint64_t partition_end = 0;
+        char current_partition[256] = "";
         for (int i = 0; i < count; i++) {
 
             cJSON *ts_item = cJSON_GetArrayItem(ts_arr, i);
@@ -190,12 +316,35 @@ int main() {
                 c.volume
             );
 
+            // fwrite(&c, sizeof(CandleStick), 1, f);
+            char *filename = get_partition_filename(c.timestamp);
+            if (partition_start == 0) {
+                partition_start = c.timestamp;
+            }
+
+            partition_end = c.timestamp;
+
+            strcpy(current_partition, filename);
+            FILE *f = fopen(filename, "ab");
+
+            if (!f) {
+                perror("Failed to open partition file");
+                continue;
+            }
+
             fwrite(&c, sizeof(CandleStick), 1, f);
+
+            fclose(f);
         }
 
-        fclose(f);
+        // printf("Success. Data written to %s\n", DATA_FILE);
+        update_catalog(
+            current_partition,
+            partition_start,
+            partition_end
+        );
 
-        printf("Success. Data written to %s\n", DATA_FILE);
+        printf("Success. Data written to partitions\n");
 
         // Cleanup
         cJSON_Delete(root);

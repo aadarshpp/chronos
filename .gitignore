@@ -19,3 +19,5 @@ venv/
 # Helper
 helper/
 *.zip
+
+libcurl-x64.dll
