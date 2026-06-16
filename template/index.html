@@ -161,6 +161,7 @@
                 const smaPeriod = parseInt(document.getElementById('sma-period').value);
                 
                 // Fetch data
+                let symbol = "AAPL"; // Default symbol, can be made dynamic later
                 const response = await fetch(`/api/indicators/sma?symbol=${symbol}&period=${smaPeriod}`);
                 const data = await response.json();
                 
