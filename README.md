@@ -1,6 +1,9 @@
 # Metric-T
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi)](https://fastapi.tiangolo.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+[![C](https://img.shields.io/badge/C-17-blue?logo=c)](...)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](...)
+[![FastAPI](https://img.shields.io/badge/FastAPI-green?logo=fastapi)](...)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](...)
 
 ## Overview
 
