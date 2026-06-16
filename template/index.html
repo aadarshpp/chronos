@@ -106,6 +106,19 @@
         <div class="controls">
             <button id="theme-btn" onclick="toggleTheme()">Switch to Light Mode</button>
             <button id="table-btn" onclick="toggleTable()">Show Data Table</button>
+            <input type="checkbox" id="sma-toggle" onchange="loadData()">
+            <label for="sma-toggle">Show SMA</label>
+
+            <!-- SMA PERIOD SELECTOR -->
+            <div class="control-item">
+                <label for="sma-period">SMA Period:</label>
+                <select id="sma-period">
+                    <option value="10">10 Days</option>
+                    <option value="20" selected>20 Days</option>
+                    <option value="50">50 Days</option>
+                    <option value="200">200 Days</option>
+                </select>
+            </div>
         </div>
 
         <!-- CHART -->
@@ -141,21 +154,43 @@
         let isDarkMode = true;
 
         async function loadData() {
-            try {
-                const response = await fetch('/api/data');
+
+            // Check if SMA is requested
+            const smaEnabled = document.getElementById('sma-toggle').checked;
+            if (smaEnabled) {
+                const smaPeriod = parseInt(document.getElementById('sma-period').value);
+                
+                // Fetch data
+                const response = await fetch(`/api/indicators/sma?symbol=${symbol}&period=${smaPeriod}`);
                 const data = await response.json();
                 
-                if (data.length === 0) {
-                    document.body.innerHTML += "<h3 style='text-align:center; color:red'>No Data Found. Run ./fetcher in terminal.</h3>";
-                    return;
-                }
+                // Plotting
+                candlestickSeries.setData(data);
+                
+                // Add the SMA line
+                const smaData = data.map(d => ({ time: d.x, value: d.sma }));
+                const smaSeries = chart.addLineSeries({
+                    data: smaData,
+                    color: 'blue',
+                    lineWidth: 2
+                });
+            } else {
+                try {
+                    const response = await fetch('/api/data');
+                    const data = await response.json();
+                    
+                    if (data.length === 0) {
+                        document.body.innerHTML += "<h3 style='text-align:center; color:red'>No Data Found. Run ./fetcher in terminal.</h3>";
+                        return;
+                    }
 
-                currentData = data;
-                renderChart(data);
-                renderTable(data); // Pre-load table
-            } catch (error) {
-                console.error("Critical Error:", error);
-                alert("Failed to load data. Check console (F12) for details.");
+                    currentData = data;
+                    renderChart(data);
+                    renderTable(data); // Pre-load table
+                } catch (error) {
+                    console.error("Critical Error:", error);
+                    alert("Failed to load data. Check console (F12) for details.");
+                }
             }
         }
 
