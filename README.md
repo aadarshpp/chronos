@@ -105,7 +105,6 @@ Metric-T/
 *   **C Compiler:** GCC (Linux/MinGW) or Clang.
 *   **Libraries:** `libcurl` (Network), `cJSON` (Parsing).
 *   **Python:** 3.8+
-*   **Docker:** (Optional) See `docker-compose.yml` for containerized deployment.
 
 ### Installation
 
@@ -171,7 +170,6 @@ Metric-T/
 *   **Core:** C, libcurl, cJSON
 *   **Backend:** Python, FastAPI, Uvicorn, mmap
 *   **Frontend:** HTML5, JavaScript, TradingView Lightweight Charts
-*   **Deployment:** Docker, Docker Compose
 
 ## License
 
