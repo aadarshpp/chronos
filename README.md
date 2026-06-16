@@ -1,16 +1,16 @@
 # Metric-T
-
-A high-performance financial time-series database built with C for storage efficiency and Python for visualization. Metric-T fetches market data, stores it in a compact binary format, and serves it through a modern web dashboard.
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green?logo=fastapi)](https://fastapi.tiangolo.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-Metric-T is designed around a hybrid architecture to maximize throughput and minimize storage overhead:
+Metric-T is designed around a hybrid architecture to maximize throughput, minimize storage overhead, and ensure scalability:
 
-* **Core Engine (C)** - Handles low-level networking (libcurl), JSON parsing (cJSON), and binary serialization.
-* **API Layer (Python)** - Serves the binary data via a high-performance REST API (FastAPI).
-* **Frontend Dashboard** - Renders interactive financial charts using TradingView Lightweight Charts.
+*   **Core Engine (C)** - Handles low-level networking (libcurl), JSON parsing (cJSON), and binary serialization into monthly partitions.
+*   **API Layer (Python)** - Serves the binary data via a high-performance REST API (FastAPI) using **Memory Mapping (`mmap`)** to avoid loading entire files into RAM.
+*   **Frontend Dashboard** - Renders interactive financial charts using TradingView Lightweight Charts.
 
-This project demonstrates how low-level systems programming (C) can be seamlessly integrated with modern web technologies (Python/JS) to build efficient analytics tools.
+This project demonstrates how low-level systems programming (C) can be seamlessly integrated with modern web technologies (Python/JS) to build efficient, scalable analytics tools.
 
 ---
 
@@ -20,6 +20,15 @@ This project demonstrates how low-level systems programming (C) can be seamlessl
 *   **Fixed-Width Schema:** Enforced 32-byte records using `#pragma pack`.
 *   **Performance:** Eliminates parsing overhead found in text-based formats (CSV/JSON).
 *   **Density:** 100% storage efficiency with no padding.
+
+### Time-Series Partitioning (Scalability)
+*   **Dynamic Chunking:** Data is automatically split into monthly partitions (e.g., `data/TSLA_2023_10.bin`) based on timestamp.
+*   **Catalog Index:** A JSON catalog (`catalog.json`) tracks partition metadata (start/end times), enabling rapid discovery.
+*   **Scalable Design:** Querying 5 years of data only scans the relevant monthly files, not the entire dataset.
+
+### High-Performance Querying
+*   **Memory-Mapped I/O (`mmap`):** The Python API uses OS-level virtual memory to read binary files.
+*   **Zero-Copy Access:** Data is read directly from disk pages to CPU registers without intermediate user-space buffering, allowing large datasets to be queried on hardware with limited RAM.
 
 ### Financial Precision
 *   **Fixed-Point Arithmetic:** Prices stored as integers (scaled by 10,000) to avoid IEEE 754 floating-point drift.
@@ -32,7 +41,7 @@ This project demonstrates how low-level systems programming (C) can be seamlessl
 ### Interactive Dashboard
 *   **High-Fidelity Viz:** TradingView Lightweight Charts for professional rendering.
 *   **Async API:** FastAPI backend prevents UI blocking during data retrieval.
-*   **Theme Support:** Dynamic Dark/Light mode for extended usage sessions.
+*   **Dynamic Fetching:** Users can input any ticker symbol (e.g., AAPL, TSLA) to fetch and visualize live data.
 
 ---
 
@@ -72,17 +81,19 @@ typedef struct {
 ```text
 Metric-T/
 ├── data/
-│   └── market_data.bin     # The binary database
+│   ├── catalog.json          # Partition metadata index
+│   ├── AAPL_2023_10.bin      # Partitioned binary files
+│   └── TSLA_2023_10.bin
 ├── src/
-│   ├── fetcher.c           # C Network Engine
-│   └── engine.h            # Binary Schema Definition
+│   ├── fetcher.c             # C Network Engine (Partition-aware)
+│   └── engine.h              # Binary Schema Definition
 ├── lib/
-│   └── cJSON-1.7.19/       # JSON Parser Dependency
+│   └── cJSON-1.7.19/          # JSON Parser Dependency
 ├── scripts/
-│   └── verify.py           # Python Interop Verification
-├── index.html              # Frontend Dashboard
-├── main.py                 # FastAPI Server
-├── requirements.txt        # Python Dependencies
+│   └── verify.py              # Python Interop Verification
+├── index.html                 # Frontend Dashboard
+├── main.py                    # FastAPI Server (mmap enabled)
+├── requirements.txt           # Python Dependencies
 └── README.md
 ```
 
@@ -94,6 +105,7 @@ Metric-T/
 *   **C Compiler:** GCC (Linux/MinGW) or Clang.
 *   **Libraries:** `libcurl` (Network), `cJSON` (Parsing).
 *   **Python:** 3.8+
+*   **Docker:** (Optional) See `docker-compose.yml` for containerized deployment.
 
 ### Installation
 
@@ -112,14 +124,14 @@ Metric-T/
         gcc src/fetcher.c lib/cJSON-1.7.19/cJSON.c -Ilib/cJSON-1.7.19 -o fetcher -lcurl
         ```
 
-3.  **Generate Data:**
-    This fetches real-time data from Yahoo Finance and writes it to the binary file.
+3.  **Generate Data (Partitioned):**
+    Fetches real-time data and splits it into monthly partitions.
     ```bash
-    # Windows
-    .\fetcher
+    # Fetch AAPL
+    ./fetcher AAPL
     
-    # Linux
-    ./fetcher
+    # Fetch TSLA
+    ./fetcher TSLA
     ```
 
 4.  **Launch Dashboard:**
@@ -137,10 +149,16 @@ Metric-T/
           │
           ▼ (JSON)
     ┌─────────────┐
-    │ Fetcher (C) │ --(Binary Write)--> [market_data.bin]
+    │ Fetcher (C) │
     └─────────────┘
           │
-          ▼ (Reads Binary File)
+          ├────────────────────────────┐
+          │                            │
+          ▼ (Binary Write)             ▼ (JSON Update)
+    [data/TSLA_2023_10.bin]    [catalog.json]
+    [data/TSLA_2023_11.bin]
+          │
+          ▼ (mmap / Read)
     ┌─────────────┐
     │  FastAPI    │ --(JSON API)--> [index.html]
     └─────────────┘
@@ -151,8 +169,9 @@ Metric-T/
 ## Technology Stack
 
 *   **Core:** C, libcurl, cJSON
-*   **Backend:** Python, FastAPI, Uvicorn
+*   **Backend:** Python, FastAPI, Uvicorn, mmap
 *   **Frontend:** HTML5, JavaScript, TradingView Lightweight Charts
+*   **Deployment:** Docker, Docker Compose
 
 ## License
 
