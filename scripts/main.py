@@ -6,6 +6,7 @@ import os
 import json
 import pandas as pd
 import uvicorn
+import mmap
 
 app = FastAPI()
 
@@ -36,23 +37,35 @@ def get_matching_partitions(start, end):
 
 def read_partition(file_path):
     records = []
-
+    
     with open(file_path, "rb") as f:
-        while True:
-            data = f.read(RECORD_SIZE)
+        # Map the entire file into virtual memory
+        # ACCESS_READ prevents us from accidentally modifying the binary file
+        with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+            file_size = os.path.getsize(file_path)
+            offset = 0
+            
+            # Loop through the memory-mapped region
+            # We check file_size to ensure we don't read past the end
+            while offset + RECORD_SIZE <= file_size:
+                # Slice the memory view instead of calling f.read()
+                # This is instantaneous and doesn't copy data to a new buffer
+                data = mm[offset : offset + RECORD_SIZE]
+                
+                if not data:
+                    break
 
-            if not data:
-                break
+                ts, o, h, l, c, v, crc = struct.unpack(FORMAT, data)
 
-            ts, o, h, l, c, v, crc = struct.unpack(FORMAT, data)
-
-            records.append({
-                "x": ts * 1000,
-                "o": o / 10000.0,
-                "h": h / 10000.0,
-                "l": l / 10000.0,
-                "c": c / 10000.0
-            })
+                records.append({
+                    "x": ts * 1000,
+                    "o": o / 10000.0,
+                    "h": h / 10000.0,
+                    "l": l / 10000.0,
+                    "c": c / 10000.0
+                })
+                    
+                offset += RECORD_SIZE
 
     return records
 
