@@ -13,6 +13,7 @@ typedef struct {
     int32_t close;      // 4 bytes
     uint32_t volume;    // 4 bytes
     uint32_t crc;       // 4 bytes
+    float    sma;       // 4 bytes (field for SMA)
 } CandleStick;
 
 #pragma pack(pop)
