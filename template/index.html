@@ -158,125 +158,59 @@
     <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 
     <script>
-        let chart;
-        let candlestickSeries;
-        let currentData = [];
-        let isDarkMode = true;
-        let smaSeries = null;
+    // Global variables
+    let chart = null;
+    let candlestickSeries = null;
+    let smaSeries = null;
+    let resizeObserver = null;
+    let isDarkMode = true;
 
-        async function loadData() {
+    document.addEventListener('DOMContentLoaded', () => {
+        // Initialize theme and load default data when page is ready
+        updateTheme();
+        loadData();
+    });
+
+    async function loadData() {
+        try {
+            let symbol;
+            const DefaultSymbol = "AAPL";
+
             try {
-
-                let symbol;
-                const DefaultSymbol = "AAPL";
-                try {
-                    const rawSymbol = document.getElementById('symbol-input')?.value?.trim();
-                    symbol = /^[A-Z0-9.-]{1,10}$/i.test(rawSymbol) ? rawSymbol.toUpperCase() : "AAPL";
-                } catch (e) {
-                    console.warn(`Symbol input error, defaulting to ${DefaultSymbol}:`, e);
-                    symbol = DefaultSymbol;
-                }
-                
-                const smaEnabled = document.getElementById('sma-toggle').checked;
-
-                let data;
-                if (smaEnabled) {
-                    const period = document.getElementById('sma-period').value;
-                    const response = await fetch(`/api/indicators/sma?symbol=${symbol}&period=${period}`);
-                    data = await response.json();
-                } else {
-                    const response = await fetch(`/api/data?symbol=${symbol}`);
-                    data = await response.json();
-                }
-
-                if (!Array.isArray(data) || data.length === 0) {
-                    alert("No data found. Run ./fetcher first.");
-                    return;
-                }
-
-                // Update candlesticks
-                candlestickSeries.setData(data);
-
-                // Manage SMA line series
-                if (smaSeries) {
-                    chart.removeSeries(smaSeries);
-                    smaSeries = null;
-                }
-
-                if (smaEnabled) {
-                    smaSeries = chart.addLineSeries({
-                        color: 'rgba(75, 192, 192, 1)',
-                        lineWidth: 2,
-                        title: 'SMA',
-                        priceScaleId: 'right'
-                    });
-
-                    const smaData = data
-                        .map(d => ({
-                            time: d.x / 1000,
-                            value: d.sma
-                        }))
-                        .filter(d => d.value > 0); // Filter out warmup zeros if desired
-
-                    smaSeries.setData(smaData);
-                }
-
-                // Refresh table if you have a renderTable function
-                if (typeof renderTable === 'function') renderTable(data);
-
-            } catch (error) {
-                console.error("LoadData error:", error);
-                alert("Failed to load chart data.");
+                const rawSymbol = document.getElementById('symbol-input')?.value?.trim();
+                symbol = /^[A-Z0-9.-]{1,10}$/i.test(rawSymbol) ? rawSymbol.toUpperCase() : DefaultSymbol;
+            } catch (e) {
+                console.warn(`Symbol input error, defaulting to ${DefaultSymbol}:`, e);
+                symbol = DefaultSymbol;
             }
-        }
-
-        function renderChart(data) {
-            const chartElement = document.getElementById('chart');
             
-            // 1. Create Chart
-            chart = LightweightCharts.createChart(chartElement, {
-                width: chartElement.parentElement.clientWidth,
-                height: 600,
-                layout: {
-                    background: { color: '#ffffff' },
-                    textColor: '#333',
-                },
-                grid: {
-                    vertLines: { color: '#e1e1e1' },
-                    horzLines: { color: '#e1e1e1' },
-                },
-                crosshair: {
-                    mode: LightweightCharts.CrosshairMode.Normal,
-                },
-                rightPriceScale: {
-                    borderColor: '#cccccc',
-                },
-                timeScale: {
-                    borderColor: '#cccccc',
-                    timeVisible: true,
-                    secondsVisible: false,
-                    
-                    // --- ALIGNMENT & ZOOM SETTINGS ---
-                    rightOffset: 10,        // Adds space on the right side (Higher number = more space)
-                    minBarSpacing: 5,       // Prevents zooming out too much (Higher = more zoomed in)
-                    fixLeftEdge: true,      // Prevents scrolling past the start
-                    fixRightEdge: true,     // Prevents scrolling past the end
-                    // -------------------------------
-                },
-            });
+            const smaEnabled = document.getElementById('sma-toggle')?.checked || false;
+            let data;
 
-            // 2. Add Series
-            candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
-                upColor: '#26a69a',
-                downColor: '#ef5350',
-                borderVisible: false,
-                wickUpColor: '#26a69a',
-                wickDownColor: '#ef5350',
-            });
+            // Fetch Data
+            if (smaEnabled) {
+                const period = document.getElementById('sma-period')?.value || 20;
+                const response = await fetch(`/api/indicators/sma?symbol=${symbol}&period=${period}`);
+                data = await response.json();
+            } else {
+                const response = await fetch(`/api/data?symbol=${symbol}`);
+                data = await response.json();
+            }
 
-            // 3. Map Data
+            if (!Array.isArray(data) || data.length === 0) {
+                alert("No data found. Run ./fetcher first.");
+                return;
+            }
+
+            // --- Initialize Chart if it doesn't exist ---
+            if (!chart) {
+                initChart();
+            }
+
+            // --- Map Data correctly before setting it ---
+            // LightweightCharts expects 'time', 'open', 'high', 'low', 'close'
             const candleData = data.map(d => ({
-                time: d.x / 1000, 
+                time: d.x / 1000, // Convert milliseconds to seconds
                 open: d.o,
                 high: d.h,
                 low: d.l,
@@ -285,118 +219,205 @@
 
             candlestickSeries.setData(candleData);
 
-            // --- FORCE ALIGNMENT ON LOAD ---
-            // This fits the data to the screen automatically when the page loads
-            chart.timeScale().fitContent();
-            // -------------------------------
+            // --- Manage SMA Line Series ---
+            // Remove existing SMA series if it exists
+            if (smaSeries) {
+                chart.removeSeries(smaSeries);
+                smaSeries = null;
+            }
 
-            // 4. Responsive Resize
-            new ResizeObserver(entries => {
+            if (smaEnabled) {
+                smaSeries = chart.addLineSeries({
+                    color: 'rgba(75, 192, 192, 1)',
+                    lineWidth: 2,
+                    title: 'SMA',
+                    priceScaleId: 'right'
+                });
+
+                const smaData = data
+                    .map(d => ({
+                        time: d.x / 1000,
+                        value: d.sma
+                    }))
+                    .filter(d => d.value != null && d.value > 0); 
+
+                smaSeries.setData(smaData);
+            }
+
+            // Fit content to screen after update
+            chart.timeScale().fitContent();
+
+            // Refresh table
+            if (typeof renderTable === 'function') renderTable(data);
+
+        } catch (error) {
+            console.error("LoadData error:", error);
+            alert("Failed to load chart data.");
+        }
+    }
+
+    // Separated Initialization logic (formerly renderChart)
+    function initChart() {
+        const chartElement = document.getElementById('chart');
+        
+        if (!chartElement) {
+            console.error("Chart element not found!");
+            return;
+        }
+
+        // 1. Create Chart
+        chart = LightweightCharts.createChart(chartElement, {
+            width: chartElement.parentElement.clientWidth,
+            height: 600,
+            layout: {
+                background: { color: '#ffffff' },
+                textColor: '#333',
+            },
+            grid: {
+                vertLines: { color: '#e1e1e1' },
+                horzLines: { color: '#e1e1e1' },
+            },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+            },
+            rightPriceScale: {
+                borderColor: '#cccccc',
+            },
+            timeScale: {
+                borderColor: '#cccccc',
+                timeVisible: true,
+                secondsVisible: false,
+                rightOffset: 10,
+                minBarSpacing: 5,
+                fixLeftEdge: true,
+                fixRightEdge: true,
+            },
+        });
+
+        // 2. Add Candlestick Series
+        candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#26a69a',
+            downColor: '#ef5350',
+            borderVisible: false,
+            wickUpColor: '#26a69a',
+            wickDownColor: '#ef5350',
+        });
+
+        // Apply the current theme
+        updateTheme();
+
+        // 3. Handle Resize (Fix for duplicate observers)
+        const wrapper = document.getElementById('chart-wrapper');
+        if (wrapper) {
+            // Disconnect previous observer if exists
+            if (resizeObserver) resizeObserver.disconnect();
+
+            resizeObserver = new ResizeObserver(entries => {
                 if (entries.length === 0) return;
                 const newRect = entries[0].contentRect;
                 chart.applyOptions({ width: newRect.width, height: newRect.height });
-            }).observe(document.getElementById('chart-wrapper'));
-            
-            // Initial Theme Apply
-            updateTheme();
-        }
-
-        // --- TABLE RENDERER ---
-        function renderTable(data) {
-            const tbody = document.getElementById('table-body');
-            tbody.innerHTML = ''; // Clear existing
-            
-            // Limit to first 100 rows for performance in browser
-            const limit = Math.min(data.length, 100);
-            
-            for(let i=0; i<limit; i++) {
-                const d = data[i];
-                const date = new Date(d.x);
-                const row = `
-                    <tr>
-                        <td>${date.toISOString()}</td>
-                        <td>${d.o.toFixed(2)}</td>
-                        <td>${d.h.toFixed(2)}</td>
-                        <td>${d.l.toFixed(2)}</td>
-                        <td>${d.c.toFixed(2)}</td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
-            }
-        }
-
-        // --- BUTTON LOGIC ---
-        function toggleTheme() {
-            isDarkMode = !isDarkMode;
-            const btn = document.getElementById('theme-btn');
-            btn.textContent = isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode";
-            updateTheme();
-        }
-
-        function toggleTable() {
-            const container = document.getElementById('data-table-container');
-            const btn = document.getElementById('table-btn');
-            
-            if (container.style.display === 'block') {
-                container.style.display = 'none';
-                btn.textContent = "Show Data Table";
-                btn.classList.remove('active');
-            } else {
-                container.style.display = 'block';
-                btn.textContent = "Hide Data Table";
-                btn.classList.add('active');
-            }
-        }
-
-        // --- THEME LOGIC ---
-        function updateTheme() {
-            if (!chart) return;
-            
-            if (isDarkMode) {
-                document.body.classList.add('dark-mode');
-            } else {
-                document.body.classList.remove('dark-mode');
-            }
-
-            const colors = isDarkMode ? {
-                bg: '#131722',
-                text: '#d1d4dc',
-                grid: '#2a2e39',
-                crosshairText: '#d1d4dc',
-                borderColor: '#2a2e39'
-            } : {
-                bg: '#ffffff',
-                text: '#333',
-                grid: '#e1e1e1',
-                crosshairText: '#333',
-                borderColor: '#cccccc'
-            };
-
-            chart.applyOptions({
-                layout: { background: { color: colors.bg }, textColor: colors.text },
-                grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
-                crosshair: {
-                    mode: LightweightCharts.CrosshairMode.Normal,
-                    vertLine: {
-                        color: '#758696',
-                        width: 1,
-                        style: LightweightCharts.LineStyle.Dashed,
-                        labelBackgroundColor: colors.bg,
-                    },
-                    horzLine: {
-                        color: '#758696',
-                        width: 1,
-                        style: LightweightCharts.LineStyle.Dashed,
-                        labelBackgroundColor: colors.bg,
-                    },
-                },
-                rightPriceScale: { borderColor: colors.borderColor },
-                timeScale: { borderColor: colors.borderColor },
             });
+            resizeObserver.observe(wrapper);
+        }
+    }
+
+    // --- TABLE RENDERER ---
+    function renderTable(data) {
+        const tbody = document.getElementById('table-body');
+        if (!tbody) return;
+        
+        tbody.innerHTML = ''; // Clear existing
+        const limit = Math.min(data.length, 100);
+        
+        for(let i=0; i<limit; i++) {
+            const d = data[i];
+            // d.x is milliseconds, handle safely
+            const date = new Date(d.x); 
+            const row = `
+                <tr>
+                    <td>${date.toISOString()}</td>
+                    <td>${Number(d.o).toFixed(2)}</td>
+                    <td>${Number(d.h).toFixed(2)}</td>
+                    <td>${Number(d.l).toFixed(2)}</td>
+                    <td>${Number(d.c).toFixed(2)}</td>
+                </tr>
+            `;
+            tbody.innerHTML += row;
+        }
+    }
+
+    // --- BUTTON LOGIC ---
+    function toggleTheme() {
+        isDarkMode = !isDarkMode;
+        const btn = document.getElementById('theme-btn');
+        if (btn) btn.textContent = isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode";
+        updateTheme();
+    }
+
+    function toggleTable() {
+        const container = document.getElementById('data-table-container');
+        const btn = document.getElementById('table-btn');
+        
+        if (!container || !btn) return;
+
+        if (container.style.display === 'block') {
+            container.style.display = 'none';
+            btn.textContent = "Show Data Table";
+            btn.classList.remove('active');
+        } else {
+            container.style.display = 'block';
+            btn.textContent = "Hide Data Table";
+            btn.classList.add('active');
+        }
+    }
+
+    // --- THEME LOGIC ---
+    function updateTheme() {
+        if (!chart) return;
+        
+        // Toggle body class for CSS styling
+        if (isDarkMode) {
+            document.body.classList.add('dark-mode');
+        } else {
+            document.body.classList.remove('dark-mode');
         }
 
-        // Start
-        loadData();
-    </script>
+        const colors = isDarkMode ? {
+            bg: '#131722',
+            text: '#d1d4dc',
+            grid: '#2a2e39',
+            crosshairText: '#d1d4dc',
+            borderColor: '#2a2e39'
+        } : {
+            bg: '#ffffff',
+            text: '#333',
+            grid: '#e1e1e1',
+            crosshairText: '#333',
+            borderColor: '#cccccc'
+        };
+
+        chart.applyOptions({
+            layout: { background: { color: colors.bg }, textColor: colors.text },
+            grid: { vertLines: { color: colors.grid }, horzLines: { color: colors.grid } },
+            crosshair: {
+                mode: LightweightCharts.CrosshairMode.Normal,
+                vertLine: {
+                    color: '#758696',
+                    width: 1,
+                    style: LightweightCharts.LineStyle.Dashed,
+                    labelBackgroundColor: colors.bg,
+                },
+                horzLine: {
+                    color: '#758696',
+                    width: 1,
+                    style: LightweightCharts.LineStyle.Dashed,
+                    labelBackgroundColor: colors.bg,
+                },
+            },
+            rightPriceScale: { borderColor: colors.borderColor },
+            timeScale: { borderColor: colors.borderColor },
+        });
+    }
+</script>
 </body>
 </html>
