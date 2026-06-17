@@ -157,46 +157,71 @@
         let candlestickSeries;
         let currentData = [];
         let isDarkMode = true;
+        let smaSeries = null;
 
         async function loadData() {
+            try {
 
-            // Check if SMA is requested
-            const smaEnabled = document.getElementById('sma-toggle').checked;
-            if (smaEnabled) {
-                const smaPeriod = parseInt(document.getElementById('sma-period').value);
-                
-                // Fetch data
-                let symbol = "AAPL"; // Default symbol, can be made dynamic later
-                const response = await fetch(`/api/indicators/sma?symbol=${symbol}&period=${smaPeriod}`);
-                const data = await response.json();
-                
-                // Plotting
-                candlestickSeries.setData(data);
-                
-                // Add the SMA line
-                const smaData = data.map(d => ({ time: d.x, value: d.sma }));
-                const smaSeries = chart.addLineSeries({
-                    data: smaData,
-                    color: 'blue',
-                    lineWidth: 2
-                });
-            } else {
+                let symbol;
+                const DefaultSymbol = "AAPL";
                 try {
-                    const response = await fetch('/api/data');
-                    const data = await response.json();
-                    
-                    if (data.length === 0) {
-                        document.body.innerHTML += "<h3 style='text-align:center; color:red'>No Data Found. Run ./fetcher in terminal.</h3>";
-                        return;
-                    }
-
-                    currentData = data;
-                    renderChart(data);
-                    renderTable(data); // Pre-load table
-                } catch (error) {
-                    console.error("Critical Error:", error);
-                    alert("Failed to load data. Check console (F12) for details.");
+                    const rawSymbol = document.getElementById('symbol-input')?.value?.trim();
+                    symbol = /^[A-Z0-9.-]{1,10}$/i.test(rawSymbol) ? rawSymbol.toUpperCase() : "AAPL";
+                } catch (e) {
+                    console.warn(`Symbol input error, defaulting to ${DefaultSymbol}:`, e);
+                    symbol = DefaultSymbol;
                 }
+                
+                const smaEnabled = document.getElementById('sma-toggle').checked;
+
+                let data;
+                if (smaEnabled) {
+                    const period = document.getElementById('sma-period').value;
+                    const response = await fetch(`/api/indicators/sma?symbol=${symbol}&period=${period}`);
+                    data = await response.json();
+                } else {
+                    const response = await fetch(`/api/data?symbol=${symbol}`);
+                    data = await response.json();
+                }
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    alert("No data found. Run ./fetcher first.");
+                    return;
+                }
+
+                // Update candlesticks
+                candlestickSeries.setData(data);
+
+                // Manage SMA line series
+                if (smaSeries) {
+                    chart.removeSeries(smaSeries);
+                    smaSeries = null;
+                }
+
+                if (smaEnabled) {
+                    smaSeries = chart.addLineSeries({
+                        color: 'rgba(75, 192, 192, 1)',
+                        lineWidth: 2,
+                        title: 'SMA',
+                        priceScaleId: 'right'
+                    });
+
+                    const smaData = data
+                        .map(d => ({
+                            time: d.x / 1000,
+                            value: d.sma
+                        }))
+                        .filter(d => d.value > 0); // Filter out warmup zeros if desired
+
+                    smaSeries.setData(smaData);
+                }
+
+                // Refresh table if you have a renderTable function
+                if (typeof renderTable === 'function') renderTable(data);
+
+            } catch (error) {
+                console.error("LoadData error:", error);
+                alert("Failed to load chart data.");
             }
         }
 
