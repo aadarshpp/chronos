@@ -25,7 +25,7 @@ The system is split into two layers:
 
 ## Progress
 
-- [ ] Phase 1
+- [x] Phase 1
 - [ ] Phase 2
 - [ ] Phase 3
 - [ ] Phase 4
