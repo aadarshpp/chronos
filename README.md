@@ -1,8 +1,4 @@
-Here is a clean, professional, and simple README template for your project. It highlights the technical complexity (the "placement weapon" aspect) without being overwhelming.
-
-***
-
-# PROJECT CHRONOS
+# CHRONOS
 ### High-Performance Time-Series Storage Engine
 
 [![C](https://img.shields.io/badge/C-17-blue?logo=c)](https://en.wikipedia.org/wiki/C_(programming_language))
