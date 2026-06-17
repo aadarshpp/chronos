@@ -1,3 +1,17 @@
-# Auto genrated files
+# Compiled Java bytecode
 *.class
-ChronosClient.h
+
+# Auto-generated C headers (we regenerate these via `javac -h`)
+*.h
+
+# Compiled C shared libraries
+*.so
+*.dylib
+*.dll
+
+# The actual database file generated during testing
+data.chronos
+
+# OS junk files
+.DS_Store
+Thumbs.db
