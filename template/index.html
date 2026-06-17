@@ -108,6 +108,11 @@
             <button id="table-btn" onclick="toggleTable()">Show Data Table</button>
 
             <div class="control-item">
+                <label for="symbol-input">Symbol:</label>
+                <input type="text" id="symbol-input" value="AAPL" maxlength="10" style="width:80px; text-transform:uppercase;">
+            </div>
+
+            <div class="control-item">
                 <label>
                     <input type="checkbox" id="sma-toggle" onchange="loadData()">
                     Show SMA
