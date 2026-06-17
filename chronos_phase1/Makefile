@@ -17,7 +17,7 @@ compile_c:
 		-I$(JAVA_HOME)/include/linux
 
 run:
-    java --enable-native-access=ALL-UNNAMED $(LIB_PATH) ChronosClient
+	java --enable-native-access=ALL-UNNAMED $(LIB_PATH) ChronosClient
 
 clean:
 	rm -f *.class *.h *.so *.dylib data.chronos
