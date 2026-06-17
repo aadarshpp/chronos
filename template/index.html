@@ -106,19 +106,24 @@
         <div class="controls">
             <button id="theme-btn" onclick="toggleTheme()">Switch to Light Mode</button>
             <button id="table-btn" onclick="toggleTable()">Show Data Table</button>
-            <input type="checkbox" id="sma-toggle" onchange="loadData()">
-            <label for="sma-toggle">Show SMA</label>
 
-            <!-- SMA PERIOD SELECTOR -->
+            <div class="control-item">
+                <label>
+                    <input type="checkbox" id="sma-toggle" onchange="loadData()">
+                    Show SMA
+                </label>
+            </div>
+
             <div class="control-item">
                 <label for="sma-period">SMA Period:</label>
-                <select id="sma-period">
-                    <option value="10">10 Days</option>
-                    <option value="20" selected>20 Days</option>
-                    <option value="50">50 Days</option>
-                    <option value="200">200 Days</option>
+                <select id="sma-period" onchange="if(document.getElementById('sma-toggle').checked) loadData();">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="200">200</option>
                 </select>
             </div>
+
         </div>
 
         <!-- CHART -->
