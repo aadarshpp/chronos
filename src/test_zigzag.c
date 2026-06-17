@@ -3,7 +3,7 @@
 
 // The ZigZag encoder for 32-bit integers
 uint32_t zigzag_encode(int32_t n) {
-    return (uint32_t)((n << 1) ^ (n >> 31));
+    return ((uint32_t)n << 1) ^ (uint32_t)(n >> 31);
 }
 
 int main() {
