@@ -7,202 +7,148 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <math.h>
-#include "engine.h"
 #include "cJSON.h"
+#include "engine.h"
 
-// ---------------------------------------------------------
-// Function: get_matching_files
-// ---------------------------------------------------------
-int get_matching_files(const char *symbol, char ***files, int *count) {
-    DIR *d;
+// On-disk size is 32 bytes (struct without the in-memory sma field)
+#define DISK_RECORD_SIZE 32
+
+int compare_filenames(const void *a, const void *b) {
+    return strcmp(*(const char **)a, *(const char **)b);
+}
+
+char **discover_partitions(const char *symbol, int *count) {
+    DIR *d = opendir("data");
+    if (!d) return NULL;
+
     struct dirent *entry;
-    struct stat file_stat;
-    int capacity = 10;
-    
-    *files = (char **)malloc(capacity * sizeof(char *));
-    *count = 0;
-
-    d = opendir("data");
-    if (!d) return -1;
-
-    // FIX 4: Increased buffer size to prevent truncation (NameMax 255 + "data/" + null)
-    char filepath[512]; 
-
-    // Helper to check extension
-    const char *ext = ".bin";
-    size_t ext_len = strlen(ext);
-    size_t sym_len = strlen(symbol);
+    char **files = NULL;
+    int n = 0;
+    char prefix[128];
+    snprintf(prefix, sizeof(prefix), "%s_", symbol);
 
     while ((entry = readdir(d)) != NULL) {
-        if (entry->d_type != DT_REG) continue;
-        
-        // Check filename length safety
-        size_t name_len = strlen(entry->d_name);
-        if (name_len <= ext_len) continue; // Too short to be .bin
-
-        // FIX 5: Implement actual filtering logic
-        // Check prefix
-        if (strncmp(entry->d_name, symbol, sym_len) != 0) continue;
-        // Check suffix
-        if (strcmp(entry->d_name + name_len - ext_len, ext) != 0) continue;
-
-        snprintf(filepath, sizeof(filepath), "data/%s", entry->d_name);
-
-        // FIX 2: Inverted logic. stat() returns 0 on SUCCESS.
-        // We only want to process files we can successfully stat.
-        if (stat(filepath, &file_stat) != 0) continue; 
-
-        // Skip empty files (optional, but good practice)
-        if (file_stat.st_size == 0) continue;
-
-        // Add to list
-        (*files)[*count] = strdup(filepath);
-        (*count)++;
-
-        // Note: Ideally, you should realloc() here if *count == capacity
-        if (*count == capacity) {
-            // Omitted for brevity as per original, but strictly needed for production code
-            break; 
+        if (entry->d_type == DT_REG || entry->d_type == DT_UNKNOWN) {
+            if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0 &&
+                strstr(entry->d_name, ".bin")) {
+                files = realloc(files, (n + 1) * sizeof(char *));
+                files[n] = malloc(strlen("data/") + strlen(entry->d_name) + 1);
+                sprintf(files[n], "data/%s", entry->d_name);
+                n++;
+            }
         }
     }
     closedir(d);
-    return 0;
+
+    // Alphanumeric sort == chronological for SYMBOL_YYYY_MM.bin
+    qsort(files, n, sizeof(char *), compare_filenames);
+    *count = n;
+    return files;
 }
 
-// ---------------------------------------------------------
-// Function: calculate_sma
-// ---------------------------------------------------------
-void calculate_sma(int period, float price_buffer[], int count, float sma_buffer[]) {
-    float sum = 0.0;
-    
-    for (int i = 0; i < count; i++) {
-        sum += price_buffer[i];
-        
-        if (i >= period) {
-            // FIX 3: Corrected Sliding Window
-            // Only subtract when we move past the very first window
-            sum -= price_buffer[i - period];
-            sma_buffer[i] = sum / (float)period;
-        } else if (i == period - 1) {
-            // We have exactly 'period' items, calculate first average
-            sma_buffer[i] = sum / (float)period;
-        } else {
-            // Not enough data yet
-            sma_buffer[i] = price_buffer[i]; 
-        }
-    }
-}
-
-void free_files(char **files, int count) {
-    for (int i = 0; i < count; i++) {
-        free(files[i]);
-    }
+void free_partitions(char **files, int count) {
+    for (int i = 0; i < count; i++) free(files[i]);
     free(files);
 }
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
-        printf("Usage: ./analyzer <SYMBOL> <PERIOD>\n");
+        fprintf(stderr, "Usage: %s <symbol> <period>\n", argv[0]);
         return 1;
     }
 
     const char *symbol = argv[1];
     int period = atoi(argv[2]);
-    char **files;
+    if (period <= 0) period = 20;
+
     int file_count = 0;
-
-    if (get_matching_files(symbol, &files, &file_count) != 0) {
-        printf("Error finding files for symbol %s\n", symbol);
-        return 1;
+    char **files = discover_partitions(symbol, &file_count);
+    if (!files || file_count == 0) {
+        printf("[]\n");
+        return 0;
     }
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON *data_array = cJSON_CreateArray();
+    // Count total records
     size_t total_records = 0;
-
-    // FIX 6: Use distinct variable name for outer loop
-    for (int file_idx = 0; file_idx < file_count; file_idx++) {
-        const char *filepath = files[file_idx];
-        
-        FILE *f = fopen(filepath, "rb");
-        if (!f) continue;
-        
+    for (int i = 0; i < file_count; i++) {
         struct stat sb;
-        if (fstat(fileno(f), &sb) != 0) {
-            fclose(f);
-            continue;
-        }
-        
-        size_t file_size = sb.st_size;
-        unsigned char *file_data = (unsigned char *)mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fileno(f), 0);
-        
-        if (file_data == MAP_FAILED) {
-            fclose(f);
-            continue;
-        }
-
-        const size_t RECORD_SIZE = sizeof(CandleStick);
-        size_t num_records = file_size / RECORD_SIZE;
-        
-        // Allocs
-        float *prices = (float *)malloc(num_records * sizeof(float));
-        float *smas = (float *)malloc(num_records * sizeof(float));
-        if (!prices || !smas) {
-            // Handle alloc failure
-            if(prices) free(prices);
-            if(smas) free(smas);
-            munmap(file_data, file_size);
-            fclose(f);
-            continue;
-        }
-
-        CandleStick c;
-
-        // 1. Unpack Loop
-        for (size_t i = 0; i < num_records; i++) {
-            size_t offset = i * RECORD_SIZE;
-            memcpy(&c, file_data + offset, RECORD_SIZE);
-            prices[i] = c.close / PRICE_SCALE;
-        }
-
-        // 2. Calculate
-        calculate_sma(period, prices, num_records, smas);
-
-        // 3. Construct JSON Loop
-        for (size_t i = 0; i < num_records; i++) {
-            // FIX 1: Re-read 'c' inside this loop so data isn't stale
-            size_t offset = i * RECORD_SIZE;
-            memcpy(&c, file_data + offset, RECORD_SIZE);
-
-            cJSON *item = cJSON_CreateObject();
-            cJSON_AddItemToObject(item, "x", cJSON_CreateNumber(c.timestamp)); 
-            cJSON_AddItemToObject(item, "o", cJSON_CreateNumber(c.open / PRICE_SCALE)); 
-            cJSON_AddItemToObject(item, "h", cJSON_CreateNumber(c.high / PRICE_SCALE)); 
-            cJSON_AddItemToObject(item, "l", cJSON_CreateNumber(c.low / PRICE_SCALE)); 
-            cJSON_AddItemToObject(item, "c", cJSON_CreateNumber(c.close / PRICE_SCALE)); 
-            cJSON_AddItemToObject(item, "sma", cJSON_CreateNumber(smas[i])); 
-            cJSON_AddItemToArray(data_array, item);
-        }
-
-        free(prices);
-        free(smas);
-        munmap(file_data, file_size);
-        fclose(f);
-        total_records += num_records;
+        if (stat(files[i], &sb) == 0) total_records += sb.st_size / DISK_RECORD_SIZE;
     }
 
-    cJSON_AddItemToObject(root, "symbol", cJSON_CreateString(symbol));
-    cJSON_AddItemToObject(root, "total", cJSON_CreateNumber(total_records));
-    cJSON_AddItemToObject(root, "engine", cJSON_CreateString("C Engine"));
-    cJSON_AddItemToObject(root, "data", data_array);
-    
-    // FIX 7: Capture and free the JSON string
-    char *json_str = cJSON_PrintUnformatted(root);
-    printf("%s", json_str);
-    free(json_str);
+    if (total_records == 0) {
+        free_partitions(files, file_count);
+        printf("[]\n");
+        return 0;
+    }
 
-    if (files) free_files(files, file_count);
+    float *closes = malloc(total_records * sizeof(float));
+    CandleStick *records = malloc(total_records * sizeof(CandleStick));
+
+    // Read all partitions via mmap
+    size_t idx = 0;
+    for (int i = 0; i < file_count; i++) {
+        FILE *f = fopen(files[i], "rb");
+        if (!f) continue;
+
+        struct stat sb;
+        fstat(fileno(f), &sb);
+        size_t file_size = sb.st_size;
+        if (file_size == 0) { fclose(f); continue; }
+
+        unsigned char *data = mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fileno(f), 0);
+        if (data == MAP_FAILED) { fclose(f); continue; }
+
+        size_t num_records = file_size / DISK_RECORD_SIZE;
+        for (size_t j = 0; j < num_records; j++) {
+            unsigned char *p = data + (j * DISK_RECORD_SIZE);
+            records[idx].timestamp = *(uint64_t *)(p);
+            records[idx].open      = *(int32_t  *)(p + 8);
+            records[idx].high      = *(int32_t  *)(p + 12);
+            records[idx].low       = *(int32_t  *)(p + 16);
+            records[idx].close     = *(int32_t  *)(p + 20);
+            records[idx].volume    = *(uint32_t *)(p + 24);
+            records[idx].crc       = *(uint32_t *)(p + 28);
+            records[idx].sma       = 0.0f;
+
+            closes[idx] = records[idx].close / (float)PRICE_SCALE;
+            idx++;
+        }
+        munmap(data, file_size);
+        fclose(f);
+    }
+    free_partitions(files, file_count);
+
+    // Rolling SMA calculation
+    float window_sum = 0.0f;
+    for (size_t i = 0; i < idx; i++) {
+        window_sum += closes[i];
+        if (i >= (size_t)period) window_sum -= closes[i - period];
+        if (i >= (size_t)(period - 1)) {
+            records[i].sma = window_sum / period;
+        } else {
+            records[i].sma = closes[i]; // Warmup: track close until window fills
+        }
+    }
+
+    // Serialize to JSON array (pure array, no metadata wrapper)
+    cJSON *root = cJSON_CreateArray();
+    for (size_t i = 0; i < idx; i++) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddItemToObject(item, "x",   cJSON_CreateNumber((double)(records[i].timestamp * 1000)));
+        cJSON_AddItemToObject(item, "o",   cJSON_CreateNumber(records[i].open  / (double)PRICE_SCALE));
+        cJSON_AddItemToObject(item, "h",   cJSON_CreateNumber(records[i].high  / (double)PRICE_SCALE));
+        cJSON_AddItemToObject(item, "l",   cJSON_CreateNumber(records[i].low   / (double)PRICE_SCALE));
+        cJSON_AddItemToObject(item, "c",   cJSON_CreateNumber(records[i].close / (double)PRICE_SCALE));
+        cJSON_AddItemToObject(item, "sma", cJSON_CreateNumber((double)records[i].sma));
+        cJSON_AddItemToArray(root, item);
+    }
+
+    char *out = cJSON_PrintUnformatted(root);
+    printf("%s\n", out);
+
+    free(out);
     cJSON_Delete(root);
-
+    free(closes);
+    free(records);
     return 0;
 }
