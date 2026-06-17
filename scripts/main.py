@@ -126,19 +126,13 @@ def analyze_symbol(symbol: str, period: int):
     return json.loads(result.stdout)
 
 def get_sma_data(symbol: str, period: int):
-    """
-    Calls the native C analyzer to compute SMA.
-    """
-    cmd = ["./analyzer", symbol, str(period)]
-    
-    # Execute the C Worker
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-    except Exception as e:
-        return {"error": str(e)}
-    
-    #  # Parse the stdout (JSON string) into Python objects
-    # C handles the math; Python handles the Data Structure.
+    result = subprocess.run(
+        ["./analyzer", symbol, str(period)],
+        capture_output=True,
+        text=True
+    )
+    if result.returncode != 0:
+        raise Exception(f"Analyzer error: {result.stderr}")
     return json.loads(result.stdout)
 
 # --- ROUTE 1: SERVE THE HTML ---
@@ -159,10 +153,9 @@ async def get_api_data(start: int = None, end: int = None):
 @app.get("/api/indicators/sma")
 async def get_sma(symbol: str = "AAPL", period: int = 20):
     try:
-        # return {"data": analyze_symbol(symbol, period)}
         return get_sma_data(symbol, period)
     except Exception as e:
-        raise HTTPException(f"Analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000)
