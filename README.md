@@ -23,5 +23,13 @@ The system is split into two layers:
 *   **JDK 11+:** For running the Java server.
 *   **Make:** For build automation.
 
+## Progress
+
+- [ ] Phase 1
+- [ ] Phase 2
+- [ ] Phase 3
+- [ ] Phase 4
+- [ ] Phase 5
+
 ## License
 This project is open source and available under the [MIT License](LICENSE).
