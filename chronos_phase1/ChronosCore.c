@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include "ChronosCore.h"
+#include "ChronosClient.h"
 
 // Implement the exact function signature from the .h file
 JNIEXPORT void JNICALL Java_ChronosClient_insertRaw(JNIEnv *env, jobject obj, jlong timestamp, jdouble price) {
