@@ -1,11 +1,6 @@
 <p align="center">
-  <img src="https://plain-apac-prod-public.komododecks.com/202606/18/pUvHxdY8bEPZJjhxMnA0/image.png" width="150">
+  <img src="./assests/Chronos_banner.png" width="300">
 </p>
-
-
-<h1 align="center" style="margin:0; text-decoration:none; border-bottom:none;">CHRONOS</h1>
-<p align="center" style="color:grey"><em>Time-Series Storage Engine</em></p>
-
 
 <p align="center">
   <a href="https://en.wikipedia.org/wiki/C_(programming_language)">
