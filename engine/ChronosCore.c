@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include "ChronosClient.h"
 
 #define BLOCK_SIZE 4
