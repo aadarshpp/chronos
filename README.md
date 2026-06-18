@@ -1,10 +1,28 @@
-# CHRONOS
-### High-Performance Time-Series Storage Engine
+<p align="center">
+  <img src="https://plain-apac-prod-public.komododecks.com/202606/18/pUvHxdY8bEPZJjhxMnA0/image.png" width="150">
+</p>
 
-[![C](https://img.shields.io/badge/C-17-blue?logo=c)](https://en.wikipedia.org/wiki/C_(programming_language))
-[![Java](https://img.shields.io/badge/Java-11-orange?logo=openjdk)](https://openjdk.org/)
-[![JNI](https://img.shields.io/badge/JNI-Native-green)](https://en.wikipedia.org/wiki/Java_Native_Interface)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+<h1 align="center" style="margin:0; text-decoration:none; border-bottom:none;">CHRONOS</h1>
+<p align="center" style="color:grey"><em>Time-Series Storage Engine</em></p>
+
+
+<p align="center">
+  <a href="https://en.wikipedia.org/wiki/C_(programming_language)">
+    <img src="https://img.shields.io/badge/C-17-blue?logo=c">
+  </a>
+  <a href="https://openjdk.org/">
+    <img src="https://img.shields.io/badge/Java-11-orange?logo=openjdk">
+  </a>
+  <a href="https://en.wikipedia.org/wiki/Java_Native_Interface">
+    <img src="https://img.shields.io/badge/JNI-Native-green">
+  </a>
+  <a href="https://opensource.org/licenses/MIT">
+    <img src="https://img.shields.io/badge/License-MIT-yellow.svg">
+  </a>
+</p>
+
+---
 
 **Chronos** is a specialized storage engine designed for high-frequency financial tick data. It combines the raw speed of C for I/O and compression with the accessibility of Java for networking.
 
