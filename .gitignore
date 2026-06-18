@@ -16,5 +16,8 @@ data.chronos
 .DS_Store
 Thumbs.db
 
+# Test
+test*
+
 # Helper
 helper/
