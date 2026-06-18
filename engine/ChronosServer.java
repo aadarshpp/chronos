@@ -1,7 +1,6 @@
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -9,68 +8,65 @@ import java.util.concurrent.Executors;
 
 public class ChronosServer {
 
+    // Store the C struct pointer globally for the server's lifetime
+    private static long enginePointer;
+
     public static void main(String[] args) throws IOException {
-        // 1. Create the server listening on port 8080
+        ChronosClient client = new ChronosClient();
+        
+        // Initialize the C engine and save the pointer
+        enginePointer = client.initEngine();
+        System.out.println("C Engine initialized. Pointer: " + enginePointer);
+
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
-
-        // 2. Attach routes (endpoints)
         server.createContext("/insert", new InsertHandler());
-        server.createContext("/query", new QueryHandler());
-
-        // 3. CRITICAL REQUIREMENT: Set the thread pool to 4
+        server.createContext("/close", new CloseHandler()); // New route
         server.setExecutor(Executors.newFixedThreadPool(4));
-
-        // 4. Start the server
+        
         System.out.println("Chronos Server started on port 8080...");
         server.start();
     }
 
-    // --- Handler for /insert ---
     static class InsertHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            // We only accept GET requests for simplicity in this project
             if ("GET".equals(exchange.getRequestMethod())) {
                 String query = exchange.getRequestURI().getQuery();
-                
-                // Extract variables from the URL string
                 String timeStr = getParam(query, "time");
                 String priceStr = getParam(query, "price");
 
                 if (timeStr != null && priceStr != null) {
                     try {
-                        // Parse strings into the exact types C expects
                         long timestamp = Long.parseLong(timeStr);
-                        double price = Double.parseDouble(priceStr);
+                        double rawPrice = Double.parseDouble(priceStr);
+                        
+                        // FIXED POINT CONVERSION: Turn 150.25 into 15025
+                        int fixedPrice = (int) Math.round(rawPrice * 100);
 
-                        // Send to our Phase 1 C bridge
                         ChronosClient client = new ChronosClient();
-                        client.insertRaw(timestamp, price);
+                        client.insertCompressed(enginePointer, timestamp, fixedPrice);
 
-                        // Send HTTP 200 OK response back to curl
-                        sendResponse(exchange, 200, "OK: Data inserted\n");
-                    } catch (NumberFormatException e) {
-                        sendResponse(exchange, 400, "ERROR: Invalid number format\n");
+                        sendResponse(exchange, 200, "OK: Compressed Insert\n");
+                    } catch (Exception e) {
+                        sendResponse(exchange, 500, "ERROR: " + e.getMessage() + "\n");
                     }
                 } else {
-                    sendResponse(exchange, 400, "ERROR: Missing 'time' or 'price' parameters\n");
+                    sendResponse(exchange, 400, "ERROR: Missing params\n");
                 }
-            } else {
-                sendResponse(exchange, 405, "Method Not Allowed\n");
             }
         }
     }
 
-    // --- Handler for /query (Dummy for now) ---
-    static class QueryHandler implements HttpHandler {
+    static class CloseHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            // We will wire this up in Phase 4. For now, just acknowledge it exists.
-            sendResponse(exchange, 200, "Query endpoint reached. Implementation pending Phase 4.\n");
+            ChronosClient client = new ChronosClient();
+            client.closeEngine(enginePointer);
+            sendResponse(exchange, 200, "OK: Engine Closed. File saved.\n");
+            // In a real app, you'd exit(0) here. For testing, we just leave server running.
         }
     }
 
-    // --- Helper Methods ---
     private static void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
         exchange.sendResponseHeaders(statusCode, response.getBytes().length);
         OutputStream os = exchange.getResponseBody();
@@ -78,15 +74,11 @@ public class ChronosServer {
         os.close();
     }
 
-    // Simple helper to parse "key=value" from a URL query string
     private static String getParam(String query, String key) {
         if (query == null) return null;
-        String[] pairs = query.split("&");
-        for (String pair : pairs) {
+        for (String pair : query.split("&")) {
             String[] kv = pair.split("=");
-            if (kv.length == 2 && kv[0].equals(key)) {
-                return kv[1];
-            }
+            if (kv.length == 2 && kv[0].equals(key)) return kv[1];
         }
         return null;
     }
