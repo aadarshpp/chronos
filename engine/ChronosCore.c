@@ -169,3 +169,143 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_getIndexStats(JNIEnv *env, jobject 
             enc->index[0].baseline_ts);
     return (*env)->NewStringUTF(env, buf);
 }
+
+// --- INVERSE MATH HELPERS ---
+
+int32_t zigzag_decode(uint32_t n) {
+    return (int32_t)((n >> 1) ^ -(n & 1));
+}
+
+// Reads a varint from a file and advances the file pointer
+int read_varint(FILE *file, uint32_t *value) {
+    *value = 0;
+    int shift = 0;
+    uint8_t byte;
+    
+    do {
+        if (fread(&byte, 1, 1, file) != 1) return -1; // EOF or error
+        *value |= (uint32_t)(byte & 0x7F) << shift;
+        shift += 7;
+    } while (byte & 0x80);
+    
+    return shift / 7; // return number of bytes read
+}
+
+// --- THE QUERY FUNCTION ---
+
+JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj, jlong startTs, jlong endTs) {
+    FILE *file = fopen("data.chronos", "rb");
+    if (!file) return (*env)->NewStringUTF(env, "[]");
+
+    // 1. Seek to Magic Number (last 8 bytes)
+    fseek(file, -8, SEEK_END);
+    uint64_t magic;
+    fread(&magic, sizeof(uint64_t), 1, file);
+    if (magic != 0xDEADBEEFCAFEBABE) {
+        fclose(file);
+        return (*env)->NewStringUTF(env, "{\"error\":\"Invalid file footer\"}");
+    }
+
+    // 2. Read Block Count (previous 4 bytes)
+    fseek(file, -12, SEEK_END);
+    int32_t block_count;
+    fread(&block_count, sizeof(int32_t), 1, file);
+
+    if (block_count == 0) {
+        fclose(file);
+        return (*env)->NewStringUTF(env, "[]");
+    }
+
+    // 3. Read Index Array
+    long index_size = block_count * sizeof(IndexEntry);
+    fseek(file, -12 - index_size, SEEK_END);
+    
+    IndexEntry *index = (IndexEntry *)malloc(index_size);
+    fread(index, sizeof(IndexEntry), block_count, file);
+
+    // 4. Binary Search to find the starting block
+    int target_block = 0;
+    for (int i = 0; i < block_count; i++) {
+        if (index[i].baseline_ts <= startTs) {
+            target_block = i;
+        } else {
+            break;
+        }
+    }
+
+    // 5. Jump to Data and Initialize Decoder State
+    fseek(file, index[target_block].file_offset, SEEK_SET);
+    
+    uint32_t prev_ts = index[target_block].baseline_ts;
+    uint32_t prev_price = index[target_block].baseline_price;
+    int32_t prev_ts_delta = 0;
+    
+    // We must decode from the start of the block to rebuild the state, 
+    // even if the first few records are before startTs.
+    int block_count_local = 0;
+
+    char response[8192] = "["; // Start JSON array
+    int resp_len = 1;
+    int found_any = 0;
+
+    // 6. The Decode Loop
+    while (ftell(file) < (ftell(file))) { // Simplified: we read until we hit the index footer
+        // To strictly read ONLY this block's data without bleeding into the index, 
+        // we stop if we reach the start of the index footer
+        if (ftell(file) >= (ftell(file, 0, SEEK_END) - 12 - index_size)) break; 
+
+        uint32_t encoded_val;
+        uint32_t current_ts;
+        uint32_t current_price;
+
+        if (block_count_local == 0) {
+            // Absolute Baseline (already loaded from index, but we must read past the bytes in the file)
+            read_varint(file, &encoded_val); 
+            read_varint(file, &encoded_val); 
+            current_ts = prev_ts;
+            current_price = prev_price;
+        } else {
+            uint32_t ts_encoded, price_encoded;
+            if (read_varint(file, &ts_encoded) < 0) break;
+            if (read_varint(file, &price_encoded) < 0) break;
+
+            int32_t ts_delta;
+            if (block_count_local == 1) {
+                ts_delta = zigzag_decode(ts_encoded);
+                prev_ts_delta = ts_delta;
+            } else {
+                int32_t ts_dod = zigzag_decode(ts_encoded);
+                ts_delta = prev_ts_delta + ts_dod;
+                prev_ts_delta = ts_delta;
+            }
+            
+            int32_t price_delta = zigzag_decode(price_encoded);
+            
+            current_ts = prev_ts + ts_delta;
+            current_price = prev_price + price_delta;
+            
+            prev_ts = current_ts;
+            prev_price = current_price;
+        }
+
+        block_count_local++;
+
+        // 7. Filter and Format JSON
+        if (current_ts >= startTs && current_ts <= endTs) {
+            double real_price = current_price / 100.0;
+            resp_len += snprintf(response + resp_len, sizeof(response) - resp_len, 
+                                 "%s{\"ts\":%u,\"price\":%.2f}", 
+                                 found_any ? "," : "", current_ts, real_price);
+            found_any = 1;
+        }
+        
+        // Stop if we've passed the requested end time (optimization)
+        if (current_ts > endTs) break;
+    }
+
+    strcat(response, "]");
+    free(index);
+    fclose(file);
+
+    return (*env)->NewStringUTF(env, response);
+}
