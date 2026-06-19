@@ -56,10 +56,5 @@ make server
 *   **Java Layer:** HTTP routing, thread pooling, Fixed-Point conversion, and JNI pointer management.
 *   **C Layer (`ChronosCore.c`):** State machine management, RAM buffering, bitwise math, `fwrite` I/O, and Sparse Index generation.
 
-## Architectural Trade-offs (Limitations)
-*   **Append-Only:** Deliberately lacks UPDATE/DELETE to maximize sequential disk write speeds (standard for financial ledgers).
-*   **Volatile Index:** The index is written to disk on clean shutdown. A production system would require a Write-Ahead Log (WAL) to survive hard crashes.
-*   **RAM-Bound Index:** The index loads entirely into memory. At 20 bytes/block, 10M blocks consume ~200MB RAM, trading memory for O(log N) array speed.
-
 ## License
 This project is open source and available under the [MIT License](LICENSE).
