@@ -77,6 +77,34 @@ public class ChronosServer {
         }
     }
 
+    static class QueryHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                String query = exchange.getRequestURI().getQuery();
+                String startStr = getParam(query, "start");
+                String endStr = getParam(query, "end");
+
+                if (startStr != null && endStr != null) {
+                    try {
+                        long startTs = Long.parseLong(startStr);
+                        long endTs = Long.parseLong(endTs);
+                        
+                        ChronosClient client = new ChronosClient();
+                        // We don't even need the engine pointer for this isolated read!
+                        String jsonResult = client.queryData(startTs, endTs);
+                        
+                        sendResponse(exchange, 200, jsonResult);
+                    } catch (Exception e) {
+                        sendResponse(exchange, 500, "ERROR: " + e.getMessage() + "\n");
+                    }
+                } else {
+                    sendResponse(exchange, 400, "ERROR: Missing start/end params\n");
+                }
+            }
+        }
+    }
+
     private static void sendResponse(HttpExchange exchange, int statusCode, String response) throws IOException {
         exchange.sendResponseHeaders(statusCode, response.getBytes().length);
         OutputStream os = exchange.getResponseBody();
