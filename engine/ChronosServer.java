@@ -20,7 +20,8 @@ public class ChronosServer {
 
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
         server.createContext("/insert", new InsertHandler());
-        server.createContext("/close", new CloseHandler()); // New route
+        server.createContext("/close", new CloseHandler()); 
+        server.createContext("/stats", new StatsHandler()); 
         server.setExecutor(Executors.newFixedThreadPool(4));
         
         System.out.println("Chronos Server started on port 8080...");
@@ -40,7 +41,7 @@ public class ChronosServer {
                         long timestamp = Long.parseLong(timeStr);
                         double rawPrice = Double.parseDouble(priceStr);
                         
-                        // FIXED POINT CONVERSION: Turn 150.25 into 15025
+                        // FIXED POINT CONVERSION
                         int fixedPrice = (int) Math.round(rawPrice * 100);
 
                         ChronosClient client = new ChronosClient();
@@ -64,6 +65,15 @@ public class ChronosServer {
             client.closeEngine(enginePointer);
             sendResponse(exchange, 200, "OK: Engine Closed. File saved.\n");
             // In a real app, you'd exit(0) here. For testing, we just leave server running.
+        }
+    }
+
+    static class StatsHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            ChronosClient client = new ChronosClient();
+            String stats = client.getIndexStats(enginePointer);
+            sendResponse(exchange, 200, stats + "\n");
         }
     }
 
