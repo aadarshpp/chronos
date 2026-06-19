@@ -258,22 +258,24 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
 
     // 6. The Decode Loop
     while (ftell(file) < data_end_limit) {
-        // To strictly read ONLY this block's data without bleeding into the index, 
-        // we stop if we reach the start of the index footer
-        if (ftell(file) >= data_end_limit) break; 
-
-        uint32_t encoded_val;
+        uint32_t ts_encoded, price_encoded;
         uint32_t current_ts;
         uint32_t current_price;
 
         if (block_count_local == 0) {
-            // Absolute Baseline (already loaded from index, but we must read past the bytes in the file)
-            read_varint(file, &encoded_val); 
-            read_varint(file, &encoded_val); 
-            current_ts = prev_ts;
-            current_price = prev_price;
+            // ABSOLUTE BASELINE: Read the raw values from the file
+            if (read_varint(file, &ts_encoded) < 0) break;
+            if (read_varint(file, &price_encoded) < 0) break;
+            
+            current_ts = ts_encoded;
+            current_price = price_encoded;
+            
+            // Crucial: Reset all state for this new block
+            prev_ts = current_ts;
+            prev_price = current_price;
+            prev_ts_delta = 0;
+            
         } else {
-            uint32_t ts_encoded, price_encoded;
             if (read_varint(file, &ts_encoded) < 0) break;
             if (read_varint(file, &price_encoded) < 0) break;
 
@@ -296,7 +298,11 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
             prev_price = current_price;
         }
 
+        // Advance block counter and RESET if we hit the block size limit
         block_count_local++;
+        if (block_count_local >= BLOCK_SIZE) {
+            block_count_local = 0; 
+        }
 
         // 7. Filter and Format JSON
         if (current_ts >= startTs && current_ts <= endTs) {
