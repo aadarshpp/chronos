@@ -87,12 +87,11 @@ public class ChronosServer {
 
                 if (startStr != null && endStr != null) {
                     try {
-                        long startTs = Long.parseLong(startStr);
-                        long endTs = Long.parseLong(endTs);
+                        long qStart = Long.parseLong(startStr);
+                        long qEnd = Long.parseLong(endStr);
                         
                         ChronosClient client = new ChronosClient();
-                        // We don't even need the engine pointer for this isolated read!
-                        String jsonResult = client.queryData(startTs, endTs);
+                        String jsonResult = client.queryData(qStart, qEnd);
                         
                         sendResponse(exchange, 200, jsonResult);
                     } catch (Exception e) {
