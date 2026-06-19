@@ -70,6 +70,9 @@ JNIEXPORT jlong JNICALL Java_ChronosClient_initEngine(JNIEnv *env, jobject obj) 
 
 JNIEXPORT void JNICALL Java_ChronosClient_insertCompressed(JNIEnv *env, jobject obj, jlong ptr, jlong timestamp, jint fixedPrice) {
     ChronosEncoder *enc = (ChronosEncoder *)ptr;
+
+    pthread_mutex_lock(&enc->lock); // LOCK mutex for thread safety
+
     uint32_t ts = (uint32_t)timestamp;
     uint32_t price = (uint32_t)fixedPrice;
     
@@ -138,28 +141,32 @@ JNIEXPORT void JNICALL Java_ChronosClient_insertCompressed(JNIEnv *env, jobject 
         fwrite(enc->buffer, 1, enc->buffer_len, enc->file);
         enc->buffer_len = 0;
     }
+
+    pthread_mutex_unlock(&enc->lock); // UNLOCK mutex
 }
 
 JNIEXPORT void JNICALL Java_ChronosClient_closeEngine(JNIEnv *env, jobject obj, jlong ptr) {
     ChronosEncoder *enc = (ChronosEncoder *)ptr;
+    
+    pthread_mutex_lock(&enc->lock); // Lock to prevent inserts during shutdown
     
     if (enc->buffer_len > 0) {
         fwrite(enc->buffer, 1, enc->buffer_len, enc->file);
         enc->buffer_len = 0;
     }
     
-    // 1. Write the Index Array to disk
     fwrite(enc->index, sizeof(IndexEntry), enc->index_count, enc->file);
     
-    // 2. Write the number of blocks (4 bytes)
     int32_t num_blocks = enc->index_count;
     fwrite(&num_blocks, sizeof(int32_t), 1, enc->file);
     
-    // 3. Write the 8-byte Magic Number
     uint64_t magic = 0xDEADBEEFCAFEBABE;
     fwrite(&magic, sizeof(uint64_t), 1, enc->file);
     
     fclose(enc->file);
+    
+    pthread_mutex_unlock(&enc->lock); // Unlock
+    pthread_mutex_destroy(&enc->lock); // Tell OS we are done with the mutex
     free(enc);
 }
 
