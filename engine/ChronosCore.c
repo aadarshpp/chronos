@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <pthread.h>
 #include "ChronosClient.h"
 
 #define BLOCK_SIZE 4
@@ -48,6 +49,8 @@ typedef struct {
     
     IndexEntry index[MAX_BLOCKS];
     int index_count;
+
+    pthread_mutex_t lock;
 } ChronosEncoder;
 
 // --- JNI Functions ---
