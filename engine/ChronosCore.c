@@ -26,7 +26,7 @@ int write_varint(uint32_t value, uint8_t *buffer) {
 }
 
 // --- The Index Structure ---
-typedef struct {
+typedef struct __attribute__((packed)) {
     long file_offset;
     long baseline_ts;
     int  baseline_price;
@@ -39,11 +39,13 @@ typedef struct {
     uint32_t prev_price;
     int32_t prev_ts_delta;
     int block_record_count;
+
+    long current_block_baseline_ts;
+    int  current_block_baseline_price;
     
     uint8_t buffer[BUFFER_CAPACITY];
     int buffer_len;
     
-    // New for Phase 4
     IndexEntry index[MAX_BLOCKS];
     int index_count;
 } ChronosEncoder;
@@ -86,6 +88,10 @@ JNIEXPORT void JNICALL Java_ChronosClient_insertCompressed(JNIEnv *env, jobject 
         enc->prev_ts = ts;
         enc->prev_price = price;
         enc->prev_ts_delta = 0;
+
+        // Capture the baseline for the index when the block starts
+        enc->current_block_baseline_ts = ts;
+        enc->current_block_baseline_price = price;
         
     } else {
         int32_t ts_delta = (int32_t)(ts - enc->prev_ts);
@@ -116,12 +122,10 @@ JNIEXPORT void JNICALL Java_ChronosClient_insertCompressed(JNIEnv *env, jobject 
     
     // BLOCK RESET & INDEX SAVE
     if (enc->block_record_count >= BLOCK_SIZE) {
-        // Save the state of the block that just finished
+        // Save the current block's offset and baseline to the index
         enc->index[enc->index_count].file_offset = current_block_offset;
-        enc->index[enc->index_count].baseline_ts = enc->prev_ts; // We save the baseline of the block that just passed
-        // Note: To get the ACTUAL baseline of the block, we should have saved it at record 0. 
-        // Let's quickly fix this in the logic: we need baseline_ts from when count was 0.
-        // I will handle this cleanly in the code block below.
+        enc->index[enc->index_count].baseline_ts = enc->current_block_baseline_ts; // Use saved baseline
+        enc->index[enc->index_count].baseline_price = enc->current_block_baseline_price; // Use saved baseline
         enc->index_count++;
         enc->block_record_count = 0;
     }
