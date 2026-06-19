@@ -16,6 +16,9 @@ data.chronos
 .DS_Store
 Thumbs.db
 
+# Log
+*.log
+
 # Test
 test*
 
