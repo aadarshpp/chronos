@@ -246,13 +246,21 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
 
     char response[8192] = "["; // Start JSON array
     int resp_len = 1;
-    int found_any = 0;
+    int found_any = 0;  
+
+    // Calculate the safe endpoint (where the index footer begins)
+    long safe_end = -12 - index_size;
+    fseek(file, safe_end, SEEK_END);
+    long data_end_limit = ftell(file);
+    
+    // Jump back to data start
+    fseek(file, index[target_block].file_offset, SEEK_SET);
 
     // 6. The Decode Loop
-    while (ftell(file) < (ftell(file))) { // Simplified: we read until we hit the index footer
+    while (ftell(file) < data_end_limit) {
         // To strictly read ONLY this block's data without bleeding into the index, 
         // we stop if we reach the start of the index footer
-        if (ftell(file) >= (ftell(file, 0, SEEK_END) - 12 - index_size)) break; 
+        if (ftell(file) >= data_end_limit) break; 
 
         uint32_t encoded_val;
         uint32_t current_ts;
