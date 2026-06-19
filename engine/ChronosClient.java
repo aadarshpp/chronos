@@ -4,12 +4,10 @@ public class ChronosClient {
         System.loadLibrary("chronoscore");
     }
 
-    // 1. Initialize the C engine, returns a pointer to the C struct
     public native long initEngine();
-
-    // 2. Insert data. Note: 'price' is now an 'int' (Fixed-Point)
     public native void insertCompressed(long ptr, long timestamp, int fixedPrice);
-
-    // 3. Close the engine, flush buffer, close file
     public native void closeEngine(long ptr);
+    
+    // Temporary helper for Sub-Phase 4A testing
+    public native String getIndexStats(long ptr);
 }
