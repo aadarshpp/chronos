@@ -13,14 +13,13 @@ public class ChronosServer {
 
     public static void main(String[] args) throws IOException {
         ChronosClient client = new ChronosClient();
-        
-        // Initialize the C engine and save the pointer
         enginePointer = client.initEngine();
         System.out.println("C Engine initialized. Pointer: " + enginePointer);
 
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
         server.createContext("/insert", new InsertHandler());
-        server.createContext("/close", new CloseHandler()); 
+        server.createContext("/query", new QueryHandler());
+        server.createContext("/close", new CloseHandler());
         server.createContext("/stats", new StatsHandler()); 
         server.setExecutor(Executors.newFixedThreadPool(4));
         
