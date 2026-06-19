@@ -8,12 +8,12 @@ compile_java:
 	javac -h . ChronosClient.java ChronosServer.java
 
 compile_c:
-    gcc -shared -fPIC \
-        -o libchronoscore.so \
-        ChronosCore.c \
-        -I$(JAVA_HOME)/include \
-        -I$(JAVA_HOME)/include/linux \
-        -lpthread
+	gcc -shared -fPIC \
+		-o libchronoscore.so \
+		ChronosCore.c \
+		-I$(JAVA_HOME)/include \
+		-I$(JAVA_HOME)/include/linux \
+		-lpthread
 
 server:
 	java --enable-native-access=ALL-UNNAMED $(LIB_PATH) ChronosServer
