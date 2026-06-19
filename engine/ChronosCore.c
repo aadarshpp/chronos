@@ -63,7 +63,8 @@ JNIEXPORT jlong JNICALL Java_ChronosClient_initEngine(JNIEnv *env, jobject obj) 
     enc->prev_ts_delta = 0;
     enc->block_record_count = 0;
     enc->buffer_len = 0;
-    enc->index_count = 0; // Init index
+    enc->index_count = 0; 
+    pthread_mutex_init(&enc->lock, NULL); // Initialize the mutex
     return (jlong)enc;
 }
 
