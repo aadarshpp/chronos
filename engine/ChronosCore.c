@@ -7,7 +7,7 @@
 
 #define BLOCK_SIZE 4
 #define BUFFER_CAPACITY 4096
-#define MAX_BLOCKS 10000
+#define MAX_BLOCKS 50000
 
 // --- Helpers ---
 uint32_t zigzag_encode(int32_t n) {
