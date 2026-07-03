@@ -22,5 +22,8 @@ Thumbs.db
 # Test
 test*
 
+# JSON
+*.json
+
 # Helper
 helper/
