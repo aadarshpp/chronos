@@ -123,7 +123,7 @@
         }
 
         function dateToMs(datetimeLocalValue) {
-            return new Date(datetimeLocalValue).value;
+            return new Date(datetimeLocalValue).getTime();
         }
 
         function msToReadable(ms) {
