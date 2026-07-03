@@ -6,9 +6,6 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executors;
 
-import java.io.InputStream;
-import java.io.OutputStream;
-
 public class ChronosServer {
 
     // Store the C struct pointer globally for the server's lifetime
@@ -24,7 +21,6 @@ public class ChronosServer {
         server.createContext("/query", new QueryHandler());
         server.createContext("/close", new CloseHandler());
         server.createContext("/stats", new StatsHandler()); 
-        server.createContext("/", new RootHandler());
         server.setExecutor(Executors.newFixedThreadPool(4));
         
         System.out.println("Chronos Server started on port 8080...");
@@ -104,24 +100,6 @@ public class ChronosServer {
                     sendResponse(exchange, 400, "ERROR: Missing start/end params\n");
                 }
             }
-        }
-    }
-
-    static class RootHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            // Load the index.html file from the same directory as the Java classes
-            InputStream is = ChronosServer.class.getResourceAsStream("index.html");
-            if (is == null) {
-                sendResponse(exchange, 404, "404 Not Found");
-                return;
-            }
-            
-            byte[] htmlBytes = is.readAllBytes();
-            exchange.sendResponseHeaders(200, htmlBytes.length);
-            OutputStream os = exchange.getResponseBody();
-            os.write(htmlBytes);
-            os.close();
         }
     }
 
