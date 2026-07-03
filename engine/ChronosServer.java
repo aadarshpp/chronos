@@ -111,7 +111,7 @@ public class ChronosServer {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             // Load the index.html file from the same directory as the Java classes
-            InputStream is = ChronosServer.class.getResourceAsStream("index.html");
+            InputStream is = ChronosServer.class.getResourceAsStream("../template/index.html");
             if (is == null) {
                 sendResponse(exchange, 404, "404 Not Found");
                 return;
