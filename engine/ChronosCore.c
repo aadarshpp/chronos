@@ -200,7 +200,7 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     FILE *file = fopen("data.chronos", "rb");
     if (!file) return (*env)->NewStringUTF(env, "[]");
 
-    // DYNAMIC ALLOCATION: 1MB buffer. No more stack overflows.
+    // DYNAMIC ALLOCATION: 1MB buffer
     char *response = (char *)malloc(1048576); 
     if (!response) {
         fclose(file);
@@ -208,14 +208,15 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     }
     
     int resp_len = 0;
-    resp_len += snprintf(response + resp_len, 1048576, "[");
     int found_any = 0;
+    resp_len += snprintf(response + resp_len, 1048576 - resp_len, "[");  // Fixed: use remaining size
 
-    //  Seek to Magic Number
+    // Seek to Magic Number
     fseek(file, -8, SEEK_END);
     uint64_t magic;
     fread(&magic, sizeof(uint64_t), 1, file);
     if (magic != 0xDEADBEEFCAFEBABE) {
+        free(response);
         fclose(file);
         return (*env)->NewStringUTF(env, "{\"error\":\"Invalid file footer\"}");
     }
@@ -225,6 +226,7 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     fread(&block_count, sizeof(int32_t), 1, file);
 
     if (block_count == 0) {
+        free(response);
         fclose(file);
         return (*env)->NewStringUTF(env, "[]");
     }
@@ -255,9 +257,7 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     int32_t prev_ts_delta = 0;
     int block_count_local = 0;
 
-    char response[8192] = "[";
-    int resp_len = 1;
-    int found_any = 0;
+    // REMOVED: duplicate declarations of response, resp_len, found_any
 
     while (ftell(file) < data_end_limit) {
         uint32_t ts_encoded, price_encoded;
@@ -305,7 +305,7 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
 
         if (current_ts >= startTs && current_ts <= endTs) {
             double real_price = current_price / 100.0;
-            resp_len += snprintf(response + resp_len, sizeof(response) - resp_len, 
+            resp_len += snprintf(response + resp_len, 1048576 - resp_len,  // Fixed: use remaining size
                                  "%s{\"ts\":%u,\"price\":%.2f}", 
                                  found_any ? "," : "", current_ts, real_price);
             found_any = 1;
@@ -314,11 +314,11 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
         if (current_ts > endTs) break;
     }
 
-    resp_len += snprintf(response + resp_len, 1048576 - resp_len, "]");
+    resp_len += snprintf(response + resp_len, 1048576 - resp_len, "]");  // Fixed: use remaining size
     free(index);
     fclose(file);
 
     jstring result = (*env)->NewStringUTF(env, response);
-    free(response); // FREE THE MEMORY!
+    free(response);
     return result;
 }
