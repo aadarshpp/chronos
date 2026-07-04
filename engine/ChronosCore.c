@@ -10,11 +10,11 @@
 #define MAX_BLOCKS 50000
 
 // --- Helpers ---
-uint32_t zigzag_encode(int32_t n) {
-    return (uint32_t)((n << 1) ^ (n >> 31));
+uint64_t zigzag_encode(int64_t n) {
+    return (uint64_t)((n << 1) ^ (n >> 63));
 }
 
-int write_varint(uint32_t value, uint8_t *buffer) {
+int write_varint(uint64_t value, uint8_t *buffer) {
     int bytes_written = 0;
     do {
         uint8_t byte = value & 0x7F;
@@ -26,17 +26,17 @@ int write_varint(uint32_t value, uint8_t *buffer) {
     return bytes_written;
 }
 
-int32_t zigzag_decode(uint32_t n) {
-    return (int32_t)((n >> 1) ^ -(n & 1));
+int64_t zigzag_decode(uint64_t n) {
+    return (int64_t)((n >> 1) ^ -(n & 1));
 }
 
-int read_varint(FILE *file, uint32_t *value) {
+int read_varint(FILE *file, uint64_t *value) {
     *value = 0;
     int shift = 0;
     uint8_t byte;
     do {
         if (fread(&byte, 1, 1, file) != 1) return -1;
-        *value |= (uint32_t)(byte & 0x7F) << shift;
+        *value |= (uint64_t)(byte & 0x7F) << shift;
         shift += 7;
     } while (byte & 0x80);
     return shift / 7;
@@ -52,23 +52,22 @@ typedef struct __attribute__((packed)) {
 // --- The State Struct ---
 typedef struct {
     FILE *file;
-    uint32_t prev_ts;
-    uint32_t prev_price;
-    int32_t prev_ts_delta;
+    uint64_t prev_ts;
+    uint64_t prev_price;
+    int64_t prev_ts_delta;
     int block_record_count;
     
     uint8_t buffer[BUFFER_CAPACITY];
     int buffer_len;
     
+    long current_block_offset;      // ADDED: To track partial blocks
     long current_block_baseline_ts;
     int  current_block_baseline_price;
     
     IndexEntry index[MAX_BLOCKS];
     int index_count;
-
-    // int is_closed; <-- REMOVED
     
-    pthread_mutex_t lock; // THE GUARDIAN
+    pthread_mutex_t lock; 
 } ChronosEncoder;
 
 // --- JNI Functions ---
@@ -82,30 +81,25 @@ JNIEXPORT jlong JNICALL Java_ChronosClient_initEngine(JNIEnv *env, jobject obj) 
     enc->block_record_count = 0;
     enc->buffer_len = 0;
     enc->index_count = 0;
-    // enc->is_closed = 0; <-- REMOVED
-    pthread_mutex_init(&enc->lock, NULL); // INITIALIZE GUARDIAN
+    enc->current_block_offset = 0;
+    pthread_mutex_init(&enc->lock, NULL);
     return (jlong)enc;
 }
 
 JNIEXPORT void JNICALL Java_ChronosClient_insertCompressed(JNIEnv *env, jobject obj, jlong ptr, jlong timestamp, jint fixedPrice) {
     ChronosEncoder *enc = (ChronosEncoder *)ptr;
-
-    // if (enc->is_closed) return; <-- REMOVED
     
-    // ====================================================================
-    // ABSOLUTE FIRST LINE: ACQUIRE LOCK. No other thread can enter here.
-    // ====================================================================
     pthread_mutex_lock(&enc->lock);
 
-    uint32_t ts = (uint32_t)timestamp;
-    uint32_t price = (uint32_t)fixedPrice;
+    uint64_t ts = (uint64_t)timestamp;
+    uint64_t price = (uint64_t)fixedPrice;
     
     uint8_t temp_varint[10];
     int varint_len;
-    long current_block_offset = 0;
 
     if (enc->block_record_count == 0) {
-        current_block_offset = ftell(enc->file) + enc->buffer_len;
+        // CHANGED: Save to struct instead of local variable
+        enc->current_block_offset = ftell(enc->file) + enc->buffer_len;
         
         varint_len = write_varint(ts, temp_varint);
         memcpy(enc->buffer + enc->buffer_len, temp_varint, varint_len);
@@ -148,7 +142,7 @@ JNIEXPORT void JNICALL Java_ChronosClient_insertCompressed(JNIEnv *env, jobject 
 
     enc->block_record_count++;
     if (enc->block_record_count >= BLOCK_SIZE) {
-        enc->index[enc->index_count].file_offset = current_block_offset;
+        enc->index[enc->index_count].file_offset = enc->current_block_offset;
         enc->index[enc->index_count].baseline_ts = enc->current_block_baseline_ts;
         enc->index[enc->index_count].baseline_price = enc->current_block_baseline_price;
         enc->index_count++;
@@ -160,9 +154,6 @@ JNIEXPORT void JNICALL Java_ChronosClient_insertCompressed(JNIEnv *env, jobject 
         enc->buffer_len = 0;
     }
 
-    // ====================================================================
-    // ABSOLUTE LAST LINE: RELEASE LOCK. Other threads can now enter.
-    // ====================================================================
     pthread_mutex_unlock(&enc->lock);
 }
 
@@ -176,6 +167,14 @@ JNIEXPORT void JNICALL Java_ChronosClient_closeEngine(JNIEnv *env, jobject obj, 
         enc->buffer_len = 0;
     }
     
+    // ADDED: FLUSH PARTIAL BLOCK TO INDEX
+    if (enc->block_record_count > 0) {
+        enc->index[enc->index_count].file_offset = enc->current_block_offset;
+        enc->index[enc->index_count].baseline_ts = enc->current_block_baseline_ts;
+        enc->index[enc->index_count].baseline_price = enc->current_block_baseline_price;
+        enc->index_count++;
+    }
+
     fwrite(enc->index, sizeof(IndexEntry), enc->index_count, enc->file);
     
     int32_t num_blocks = enc->index_count;
@@ -185,11 +184,8 @@ JNIEXPORT void JNICALL Java_ChronosClient_closeEngine(JNIEnv *env, jobject obj, 
     fwrite(&magic, sizeof(uint64_t), 1, enc->file);
     
     fclose(enc->file);
-    // enc->is_closed = 1;            <-- REMOVED
     
     pthread_mutex_unlock(&enc->lock);
-    // pthread_mutex_destroy(&enc->lock); <-- REMOVED
-    // free(enc);                          <-- REMOVED
 }
 
 JNIEXPORT jstring JNICALL Java_ChronosClient_getIndexStats(JNIEnv *env, jobject obj, jlong ptr) {
@@ -206,7 +202,6 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     FILE *file = fopen("data.chronos", "rb");
     if (!file) return (*env)->NewStringUTF(env, "[]");
 
-    // DYNAMIC ALLOCATION: 1MB buffer
     char *response = (char *)malloc(1048576); 
     if (!response) {
         fclose(file);
@@ -217,7 +212,6 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     int found_any = 0;
     resp_len += snprintf(response + resp_len, 1048576 - resp_len, "[");
 
-    // Seek to Magic Number
     fseek(file, -8, SEEK_END);
     uint64_t magic;
     fread(&magic, sizeof(uint64_t), 1, file);
@@ -258,15 +252,15 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     
     fseek(file, index[target_block].file_offset, SEEK_SET);
     
-    uint32_t prev_ts = index[target_block].baseline_ts;
-    uint32_t prev_price = index[target_block].baseline_price;
-    int32_t prev_ts_delta = 0;
+    uint64_t prev_ts = index[target_block].baseline_ts;
+    uint64_t prev_price = index[target_block].baseline_price;
+    int64_t prev_ts_delta = 0;
     int block_count_local = 0;
 
     while (ftell(file) < data_end_limit) {
-        uint32_t ts_encoded, price_encoded;
-        uint32_t current_ts;
-        uint32_t current_price;
+        uint64_t ts_encoded, price_encoded;
+        uint64_t current_ts;
+        uint64_t current_price;
 
         if (block_count_local == 0) {
             if (read_varint(file, &ts_encoded) < 0) break;
