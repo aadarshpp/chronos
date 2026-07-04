@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
+#include <inttypes.h>
 #include "ChronosClient.h"
 
 #define BLOCK_SIZE 4
@@ -53,7 +54,7 @@ typedef struct __attribute__((packed)) {
 typedef struct {
     FILE *file;
     uint64_t prev_ts;
-    uint64_t prev_price;
+    uint32_t prev_price;
     int64_t prev_ts_delta;
     int block_record_count;
     
@@ -304,8 +305,9 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
         if (current_ts >= startTs && current_ts <= endTs) {
             double real_price = current_price / 100.0;
             resp_len += snprintf(response + resp_len, 1048576 - resp_len, 
-                                 "%s{\"ts\":%u,\"price\":%.2f}", 
-                                 found_any ? "," : "", current_ts, real_price);
+                                  "%s{\"ts\":%" PRIu64 ",\"price\":%.2f}",
+         found_any ? "," : "", current_ts, real_price);
+
             found_any = 1;
         }
         
