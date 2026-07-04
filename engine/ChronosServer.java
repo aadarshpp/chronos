@@ -25,6 +25,13 @@ public class ChronosServer {
         
         System.out.println("Chronos Server started on port 8080...");
         server.start();
+
+        // Keep the JVM alive so the C library doesn't crash on exit
+        try {
+            Thread.currentThread().join();
+        } catch (InterruptedException e) {
+            // Do nothing, server is shutting down
+        }
     }
 
     static class InsertHandler implements HttpHandler {

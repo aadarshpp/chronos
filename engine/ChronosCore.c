@@ -66,7 +66,7 @@ typedef struct {
     IndexEntry index[MAX_BLOCKS];
     int index_count;
 
-    int is_closed;
+    // int is_closed; <-- REMOVED
     
     pthread_mutex_t lock; // THE GUARDIAN
 } ChronosEncoder;
@@ -82,7 +82,7 @@ JNIEXPORT jlong JNICALL Java_ChronosClient_initEngine(JNIEnv *env, jobject obj) 
     enc->block_record_count = 0;
     enc->buffer_len = 0;
     enc->index_count = 0;
-    enc->is_closed = 0;
+    // enc->is_closed = 0; <-- REMOVED
     pthread_mutex_init(&enc->lock, NULL); // INITIALIZE GUARDIAN
     return (jlong)enc;
 }
@@ -90,8 +90,7 @@ JNIEXPORT jlong JNICALL Java_ChronosClient_initEngine(JNIEnv *env, jobject obj) 
 JNIEXPORT void JNICALL Java_ChronosClient_insertCompressed(JNIEnv *env, jobject obj, jlong ptr, jlong timestamp, jint fixedPrice) {
     ChronosEncoder *enc = (ChronosEncoder *)ptr;
 
-    // GUARD: Reject late-arriving network packets after close
-    if (enc->is_closed) return;
+    // if (enc->is_closed) return; <-- REMOVED
     
     // ====================================================================
     // ABSOLUTE FIRST LINE: ACQUIRE LOCK. No other thread can enter here.
@@ -186,11 +185,11 @@ JNIEXPORT void JNICALL Java_ChronosClient_closeEngine(JNIEnv *env, jobject obj, 
     fwrite(&magic, sizeof(uint64_t), 1, enc->file);
     
     fclose(enc->file);
-    enc->is_closed = 1;
+    // enc->is_closed = 1;            <-- REMOVED
     
     pthread_mutex_unlock(&enc->lock);
-    pthread_mutex_destroy(&enc->lock);
-    free(enc);
+    // pthread_mutex_destroy(&enc->lock); <-- REMOVED
+    // free(enc);                          <-- REMOVED
 }
 
 JNIEXPORT jstring JNICALL Java_ChronosClient_getIndexStats(JNIEnv *env, jobject obj, jlong ptr) {
@@ -216,7 +215,7 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     
     int resp_len = 0;
     int found_any = 0;
-    resp_len += snprintf(response + resp_len, 1048576 - resp_len, "[");  // Fixed: use remaining size
+    resp_len += snprintf(response + resp_len, 1048576 - resp_len, "[");
 
     // Seek to Magic Number
     fseek(file, -8, SEEK_END);
@@ -264,8 +263,6 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     int32_t prev_ts_delta = 0;
     int block_count_local = 0;
 
-    // REMOVED: duplicate declarations of response, resp_len, found_any
-
     while (ftell(file) < data_end_limit) {
         uint32_t ts_encoded, price_encoded;
         uint32_t current_ts;
@@ -312,7 +309,7 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
 
         if (current_ts >= startTs && current_ts <= endTs) {
             double real_price = current_price / 100.0;
-            resp_len += snprintf(response + resp_len, 1048576 - resp_len,  // Fixed: use remaining size
+            resp_len += snprintf(response + resp_len, 1048576 - resp_len, 
                                  "%s{\"ts\":%u,\"price\":%.2f}", 
                                  found_any ? "," : "", current_ts, real_price);
             found_any = 1;
@@ -321,7 +318,7 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
         if (current_ts > endTs) break;
     }
 
-    resp_len += snprintf(response + resp_len, 1048576 - resp_len, "]");  // Fixed: use remaining size
+    resp_len += snprintf(response + resp_len, 1048576 - resp_len, "]");
     free(index);
     fclose(file);
 
