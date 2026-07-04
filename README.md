@@ -14,7 +14,7 @@
 **Chronos** is a specialized, high-performance time-series storage engine built for financial tick data. It bridges a C native core (for extreme I/O and bit-level compression) to a Java HTTP front-end via JNI.
 
 ## Key Features
-*   **Block-Based Delta-of-Delta Compression:** Achieves >80% file size reduction by exploiting the continuous nature of market timestamps and price ticks.
+*   **Block-Based Delta-of-Delta Compression:** Exploits the continuous nature of market timestamps and price ticks to minimize disk footprint.
 *   **Bit-Level Optimization:** Uses ZigZag encoding and Variable-Length Integers (Varint) to dynamically shrink integer footprints down to 1 byte.
 *   **O(log N) Sparse Indexing:** Appends a binary-searchable index footer to the file, allowing instant range queries without full-file scans.
 *   **Thread-Safe Concurrency:** Uses `pthread_mutex_t` to safely handle concurrent HTTP inserts via a fixed Java thread pool.
@@ -33,9 +33,15 @@
 *   `jdk 11+`
 *   `make`
 
-### Build & Run
+### Build, Run & Benchmark
 ```bash
+# Compile C library and Java server
 make clean && make
+
+# Run standard benchmark (default 100k records, max 200k)
+./benchmark.sh 100000
+
+# Start the HTTP API server
 make server
 ```
 
@@ -46,7 +52,7 @@ make server
 
 ## Architecture
 *   **Java Layer:** HTTP routing, thread pooling, Fixed-Point conversion, and JNI pointer management.
-*   **C Layer (`ChronosCore.c`):** State machine management, RAM buffering, bitwise math, `fwrite` I/O, and Sparse Index generation.
+*   **C Layer (`ChronosCore.c`):** State machine management, 64-bit bitwise math, RAM buffering, `fwrite` I/O, and Sparse Index generation.
 
 ## License
 This project is open source and available under the [MIT License](LICENSE).
