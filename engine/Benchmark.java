@@ -1,8 +1,34 @@
 import java.io.File;
 
 public class Benchmark {
+    
+    // C Engine Hard Limits (Matches ChronosCore.c)
+    private static final int MAX_RECORDS = 200000; 
+    private static final int DEFAULT_RECORDS = 100000;
+
     public static void main(String[] args) {
-        int NUM_RECORDS = 100000;
+        int NUM_RECORDS = DEFAULT_RECORDS;
+
+        // 1. Parse Command Line Arguments
+        if (args.length > 0) {
+            try {
+                NUM_RECORDS = Integer.parseInt(args[0]);
+            } catch (NumberFormatException e) {
+                System.out.println("Error: '" + args[0] + "' is not a valid number.");
+                System.exit(1);
+            }
+        }
+
+        // 2. Validate Limits
+        if (NUM_RECORDS <= 0) {
+            System.out.println("Error: Record count must be greater than 0.");
+            System.exit(1);
+        } else if (NUM_RECORDS > MAX_RECORDS) {
+            System.out.println("Error: Max record limit is " + MAX_RECORDS + " (constrained by C index array size).");
+            System.exit(1);
+        }
+
+        // 3. Run Benchmark
         ChronosClient client = new ChronosClient();
 
         System.out.println("Initializing C Engine...");
@@ -45,6 +71,7 @@ public class Benchmark {
         System.out.println("=============================================");
         System.out.println("Total Records Processed : " + NUM_RECORDS);
         System.out.println("Total Time Taken        : " + durationMs + " ms");
+        if (durationMs == 0) durationMs = 1; // Prevent divide-by-zero on insanely fast machines
         System.out.println("Throughput              : " + (NUM_RECORDS / (durationMs / 1000.0)) + " records/sec");
         System.out.println("---------------------------------------------");
         System.out.println("Raw Data Footprint      : " + (rawSizeBytes / 1024 / 1024) + " MB");
