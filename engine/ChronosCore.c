@@ -200,6 +200,18 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
     FILE *file = fopen("data.chronos", "rb");
     if (!file) return (*env)->NewStringUTF(env, "[]");
 
+    // DYNAMIC ALLOCATION: 1MB buffer. No more stack overflows.
+    char *response = (char *)malloc(1048576); 
+    if (!response) {
+        fclose(file);
+        return (*env)->NewStringUTF(env, "{\"error\":\"Out of memory\"}");
+    }
+    
+    int resp_len = 0;
+    resp_len += snprintf(response + resp_len, 1048576, "[");
+    int found_any = 0;
+
+    //  Seek to Magic Number
     fseek(file, -8, SEEK_END);
     uint64_t magic;
     fread(&magic, sizeof(uint64_t), 1, file);
@@ -302,9 +314,11 @@ JNIEXPORT jstring JNICALL Java_ChronosClient_queryData(JNIEnv *env, jobject obj,
         if (current_ts > endTs) break;
     }
 
-    strcat(response, "]");
+    resp_len += snprintf(response + resp_len, 1048576 - resp_len, "]");
     free(index);
     fclose(file);
 
-    return (*env)->NewStringUTF(env, response);
+    jstring result = (*env)->NewStringUTF(env, response);
+    free(response); // FREE THE MEMORY!
+    return result;
 }
