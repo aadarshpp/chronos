@@ -5,7 +5,7 @@ LIB_PATH := -Djava.library.path=.
 all: compile_java compile_c
 
 compile_java:
-	javac -h . ChronosClient.java ChronosServer.java
+	javac -h . ChronosClient.java ChronosServer.java Benchmark.java
 
 compile_c:
 	gcc -shared -fPIC \
